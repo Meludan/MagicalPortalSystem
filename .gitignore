@@ -227,9 +227,3 @@ logs/
 # build output - upload zips under GitHub "Releases" instead
 dist/
 *.zip
-
-*.bat  text eol=crlf
-*.ps1  text eol=crlf
-*.txt  text eol=crlf
-*.py   text eol=lf
-*.ico  binary
