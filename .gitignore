@@ -218,3 +218,18 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Magical Portal System - local data (never commit)
+streams.json
+streams.json.tmp
+logs/
+
+# build output - upload zips under GitHub "Releases" instead
+dist/
+*.zip
+
+*.bat  text eol=crlf
+*.ps1  text eol=crlf
+*.txt  text eol=crlf
+*.py   text eol=lf
+*.ico  binary
