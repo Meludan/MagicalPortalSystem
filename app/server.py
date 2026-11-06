@@ -28,7 +28,7 @@ from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
-__version__ = "1.6.1"
+__version__ = "1.7.2"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WEB_DIR = os.path.join(BASE_DIR, "web")
@@ -65,7 +65,9 @@ DEFAULT_STREAM = {
     "source_type": "file",       # file | url | desktop | dshow | test
     "source": "",
     "loop": True,
+    "smooth_send": True,         # constant bitrate + evenly paced packets (fewer drops on the network)
     "draw_mouse": True,          # desktop capture: show the mouse pointer
+    "desktop_audio": "",         # desktop capture: Windows recording device for sound ("" = no sound)
     "test_pattern": "testsrc2",  # testsrc2 | smptehdbars | color | image | video
     "test_color": "#1e1b4b",     # solid colour pattern
     "test_media": "",            # image / video file for the test source
@@ -213,9 +215,16 @@ def split_extra(text):
     return [p[1:-1] if len(p) >= 2 and p[0] == p[-1] and p[0] in "\"'" else p for p in parts]
 
 
-def udp_out_url(st):
+def udp_out_url(st, pace_kbps=0):
     ip = st["dest_ip"].strip()
     q = [f"pkt_size={as_int(st['pkt_size'], 1316)}"]
+    if pace_kbps:
+        # Send packets evenly spaced instead of in whole-frame bursts.
+        # burst_bits = how far the sender may catch up after oversleeping. Windows timers tick
+        # every ~15 ms, so allow 50 ms - otherwise FFmpeg "forgives" the lost time, sends slower
+        # than the stream, and its send buffer overflows ("Cannot allocate memory").
+        bps = pace_kbps * 1000
+        q += [f"bitrate={bps}", f"burst_bits={max(8 * 1316 * 10, bps // 20)}", "fifo_size=262144"]
     if is_multicast(ip):
         q.append(f"ttl={as_int(st['ttl'], 4)}")
     nic = adapter_ip(st)
@@ -469,7 +478,13 @@ def build_ffmpeg_send(st):
         else:
             a += ["-i", src]
     elif stype == "desktop":
-        a += gdigrab_input(src, fps, st.get("draw_mouse", True))
+        dev = (st.get("desktop_audio") or "").strip()
+        with_sound = bool(dev) and st["audio_mode"] != "none"
+        a += (["-thread_queue_size", "1024"] if with_sound else []) + gdigrab_input(src, fps, st.get("draw_mouse", True))
+        if with_sound:
+            # sound from a recording device (Stereo Mix, virtual cable, mic, line-in) at the same time
+            a += ["-thread_queue_size", "1024", "-f", "dshow", "-audio_buffer_size", "50", "-i", f"audio={dev}"]
+            maps = ["-map", "0:v:0", "-map", "1:a:0"]
     elif stype == "dshow":
         if not src:
             raise BuildError("Enter a DirectShow device, e.g. video=Cam Link 4K:audio=Line In")
@@ -509,8 +524,15 @@ def build_ffmpeg_send(st):
         a += ["-c:v", enc]
         if enc == "libx264":
             a += ["-preset", "veryfast", "-tune", "zerolatency"]
-        a += ["-b:v", f"{br}k", "-maxrate", f"{br}k", "-bufsize", f"{br * 2}k",
+        smooth = st.get("smooth_send", True)
+        # smaller rate buffer = keyframes can't spike far above the bitrate
+        a += ["-b:v", f"{br}k", "-maxrate", f"{br}k", "-bufsize", f"{br if smooth else br * 2}k",
               "-g", str(as_int(st["gop"], fps * 2)), "-pix_fmt", "yuv420p"]
+        if smooth:
+            if enc == "libx264":
+                a += ["-x264-params", "nal-hrd=cbr:force-cfr=1"]
+            elif enc in ("h264_nvenc", "h264_amf"):
+                a += ["-rc", "cbr"]
         generated = stype == "test" and (st.get("test_pattern") or "testsrc2") not in ("image", "video")
         if w and h and not generated:
             # fit inside WxH keeping the shape, black bars if needed
@@ -520,12 +542,18 @@ def build_ffmpeg_send(st):
             a += ["-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2"]
         a += ["-r", str(fps)]
 
-    amode = "none" if stype == "desktop" else st["audio_mode"]
+    desk_sound = stype == "desktop" and bool((st.get("desktop_audio") or "").strip())
+    amode = "none" if (stype == "desktop" and not desk_sound) else st["audio_mode"]
+    if amode == "copy" and desk_sound:
+        amode = "aac"
     ch = audio_channels(st)
+    if desk_sound and ch == 16:
+        ch = 2      # one recording device = one track
     if amode != "none" and ch == 16 and not maps:
         # 16 ch from a file / stream / device: keep every audio track the source has
         maps = ["-map", "0:v:0?", "-map", "0:a?"]
     a += maps
+    kbps = as_int(st["audio_bitrate"], 192)   # (refined below when audio is encoded)
     if amode == "none":
         a += ["-an"]
     elif amode == "copy" and not raw_input:
@@ -533,12 +561,24 @@ def build_ffmpeg_send(st):
     else:
         per_track = 2 if ch == 16 else ch
         kbps = max(64, as_int(st["audio_bitrate"], 192) * max(1, per_track) // 2)
+        if desk_sound:
+            a += ["-af", "aresample=async=1000"]   # keep the sound in step with the screen
         a += ["-c:a", "aac", "-b:a", f"{kbps}k", "-ar", "48000"]
         if ch != 16:
             a += ["-ac", str(ch)]
 
     a += split_extra(st.get("extra_args"))
-    a += ["-f", "mpegts", udp_out_url(st)]
+    pace = 0
+    if st.get("smooth_send", True) and vmode != "copy":
+        # constant-rate transport stream: video + audio + ~15% for the TS packaging
+        a_kbps = 0
+        if amode != "none":
+            a_kbps = kbps * (8 if ch == 16 else 1)
+        muxrate = int((as_int(st["video_bitrate"], 8000) + a_kbps) * 1.15) + 150
+        a += ["-muxrate", f"{muxrate}k"]
+        if not st.get("_no_pace"):
+            pace = int(muxrate * 1.05)      # drain slightly faster than we fill
+    a += ["-f", "mpegts", udp_out_url(st, pace)]
     return a
 
 
@@ -566,6 +606,8 @@ def build_vlc_send(st):
                      f":screen-width={mon['w']}", f":screen-height={mon['h']}"]
         elif src.startswith("title="):
             raise BuildError("Capturing one window needs FFmpeg. Switch the program to FFmpeg.")
+        if (st.get("desktop_audio") or "").strip() and st["audio_mode"] != "none":
+            raise BuildError("Desktop capture with sound needs FFmpeg. Switch the program to FFmpeg.")
     elif stype == "dshow":
         mrl = "dshow://"
         m = re.search(r"video=([^:]+)", src)
@@ -782,11 +824,17 @@ KNOWN_ERRORS = [
      lambda m: f"Source not found: {m.group(1).strip()} - check the file path."),
     (r"Cannot assign requested address|bind failed",
      lambda m: "The chosen network adapter IP isn't on this PC (any more). Pick the adapter again in Settings / the portal."),
+    (r"Could not find audio only device with name \[([^\]]+)\]|Could not find audio device.*?\[([^\]]+)\]",
+     lambda m: f"The sound device '{m.group(1) or m.group(2)}' wasn't found (unplugged, renamed or disabled). "
+               "Pick it again under Sound, or enable Stereo Mix in Windows Sound settings."),
     (r"Could not find video device|Could not enumerate video devices|I/O error.*dshow",
      lambda m: "The capture device wasn't found or is in use by another program. Use 'Find capture devices'."),
     (r"udp://[^\s]*.*?(?:Connection timed out|Input/output error|Immediate exit)|Error opening input.*udp",
      lambda m: f"No data from the input stream for {RELAY_WAIT_S} s - check it is running and that the network "
                "adapter is right (use Test). The portal keeps retrying."),
+    (r"Error submitting a packet to the muxer: Cannot allocate memory",
+     lambda m: "The packet pacing of 'Smooth sending' overflowed on this PC. The portal restarts with pacing "
+               "off (constant bitrate stays on). If it keeps happening, untick Smooth sending."),
     (r"Connection refused|Connection timed out|Server returned 404|Network is unreachable",
      lambda m: "The source URL couldn't be reached - check the address and that the source is running."),
 ]
@@ -830,6 +878,7 @@ class Runner:
         self.started_at = None
         self.restarts = 0
         self.quick_fails = 0
+        self.pace_off = False
         self.exit_code = None
         self.progress = {}
         self.media = ""
@@ -891,6 +940,8 @@ class Runner:
             if not st:
                 return False, "stream not found"
             st = {**DEFAULT_STREAM, **st}
+            if self.pace_off:
+                st["_no_pace"] = True
             try:
                 cmds = build_commands(st)
             except BuildError as e:
@@ -905,6 +956,7 @@ class Runner:
                 self.log.clear()
                 self.restarts = 0
                 self.quick_fails = 0
+                self.pace_off = False
             self.log.append(f"$ {commands_text(cmds)}")
             self.media, self.progress, self.last_data, self._section = "", {}, 0, ""
             self.input_seen = False
@@ -969,6 +1021,12 @@ class Runner:
             kill_tree(self.player)
             st = self.getter()
             ran = time.time() - (self.started_at or time.time())
+            if code != 0 and any("Cannot allocate memory" in l for l in list(self.log)[-30:]) and not self.pace_off:
+                self.pace_off = True    # packet pacing overflowed on this PC: keep CBR, drop the pacing
+                self.log.append("[smooth sending: packet pacing overflowed on this PC - restarting without "
+                                "pacing (constant bitrate stays on)]")
+                self.quick_fails = 0
+                self.last_error = ""
             self.quick_fails = self.quick_fails + 1 if (ran < 10 and code != 0) else 0
             reason = explain_failure(list(self.log)) if code != 0 else ""
             if self.want_running and self.quick_fails >= 3:
@@ -1028,6 +1086,7 @@ class Runner:
             "progress": self.progress if running else {},
             "media": self.media if running else "",
             "signal": signal,
+            "pace_off": self.pace_off,
             "error": self.last_error,
         }
 

@@ -189,6 +189,12 @@
               <button type="button" class="small" onclick="loadMonitors(true)" title="Re-read the screens from Windows">↻</button>
             </span>
             <label class="f check" style="margin-top:6px"><input type="checkbox" name="draw_mouse"> Show the mouse pointer</label>
+            <span style="margin-top:8px">Sound</span>
+            <span style="display:flex;gap:6px">
+              <select name="desktop_audio" id="soundSel"><option value="">No sound</option></select>
+              <button type="button" class="small" onclick="loadSoundDevices(true)" title="Re-read the recording devices from Windows">↻</button>
+            </span>
+            <span class="hint" id="soundHint"></span>
             <div style="margin-top:6px">
               <img id="screenPrev" alt="" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--line);display:none">
               <div class="hint" id="screenPrevMsg"></div>
@@ -282,6 +288,7 @@
         <legend>Advanced</legend>
         <div class="row">
           <label class="f wide">Extra arguments (added before the output)<input name="extra_args" class="mono" placeholder="-muxrate 10M"></label>
+          <label class="f check send-only"><input type="checkbox" name="smooth_send"> Smooth sending (constant bitrate, evenly paced packets – fewer glitches on BrightSign)</label>
           <label class="f check send-only"><input type="checkbox" name="auto_restart"> Auto-restart if it stops</label>
           <label class="f check send-only"><input type="checkbox" name="autostart"> Start when the system starts</label>
         </div>
@@ -415,7 +422,25 @@ function labelEncoders(){
     o.title = e.reason || "";
   }
 }
-let MONITORS = [];
+let MONITORS = [], SOUND_DEVS = null;
+async function loadSoundDevices(announce){
+  const j = await fetch("/api/devices").then(r=>r.json()).catch(()=>({audio:[], note:"Couldn't read devices"}));
+  SOUND_DEVS = j.audio || [];
+  fillSound(j.note || "");
+  if (announce) toast(`Found ${SOUND_DEVS.length} recording device(s)`);
+}
+function fillSound(note){
+  const sel = document.getElementById("soundSel"); if (!sel) return;
+  const cur = sel.dataset.want !== undefined ? sel.dataset.want : sel.value;
+  const devs = SOUND_DEVS || [];
+  let html = `<option value="">No sound</option>` + devs.map(d=>`<option value="${esc(d)}">${esc(d)}</option>`).join("");
+  if (cur && !devs.includes(cur)) html += `<option value="${esc(cur)}">${esc(cur)} – not found now</option>`;
+  sel.innerHTML = html; sel.value = cur || ""; delete sel.dataset.want;
+  const hasLoop = devs.some(d=>/stereo mix|what u hear|wave out|cable output|loopback|virtual/i.test(d));
+  document.getElementById("soundHint").textContent = note ? note :
+    (hasLoop ? "Pick Stereo Mix / the virtual cable to send the PC's own sound, or a mic / line-in."
+             : "To send the PC's own sound (videos, PowerPoint, browser): Windows Sound settings → More sound settings → Recording → right-click → Show disabled devices → enable Stereo Mix, then press ↻. No Stereo Mix? Install a virtual audio cable (e.g. VB-Audio Cable).");
+}
 const screenLabel = m => `Screen ${m.num} – ${m.w}×${m.h}${m.primary?" (main)":""}`;
 async function loadMonitors(announce){
   const j = await fetch("/api/monitors").then(r=>r.json()).catch(()=>({monitors:[]}));
@@ -531,7 +556,7 @@ function render(){
             </select>${["image","video"].includes(s.test_pattern)?`<code title="${esc(s.test_media)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(baseName(s.test_media))}</code>`:""}</span>`
           : `<span>Source</span><code>${esc(srcText||"—")}</code>`}
         <span>Video</span><span>${s.video_mode==="copy"&&!["desktop","dshow","test"].includes(s.source_type)?"copy":`${presetName(s)?presetName(s).replace("4k","4K")+" · ":""}H.264 ${s.width}×${s.height} @${s.fps} · ${s.video_bitrate} kbps`}</span>
-        <span>Audio</span><span>${s.audio_mode==="none"||s.source_type==="desktop"?"none":s.audio_mode==="copy"&&!["test","dshow"].includes(s.source_type)?"copy":({1:"Mono",2:"Stereo",6:"5.1",8:"7.1",16:"16 ch (8 tracks)"}[s.audio_channels]||"Stereo")+" AAC"}</span>
+        <span>Audio</span><span>${s.audio_mode==="none"||(s.source_type==="desktop"&&!s.desktop_audio)?"none":s.source_type==="desktop"?({1:"Mono",2:"Stereo",6:"5.1",8:"7.1"}[s.audio_channels]||"Stereo")+" AAC from "+esc(s.desktop_audio):s.audio_mode==="copy"&&!["test","dshow"].includes(s.source_type)?"copy":({1:"Mono",2:"Stereo",6:"5.1",8:"7.1",16:"16 ch (8 tracks)"}[s.audio_channels]||"Stereo")+" AAC"}</span>
         <span>BrightSign URL</span><code>${esc(s.brightsign_url)}</code>`
         :`<span>Receiving</span><code>${esc(isMulticast(s.dest_ip)?`${s.dest_ip}:${s.dest_port} (multicast)`:`port ${s.dest_port} on this PC`)}</code>`}
         <span>Adapter</span><span>${esc(adapterLabel(s.adapter_used))}</span>
@@ -539,6 +564,7 @@ function render(){
       ${running && r.signal ? signalBadge(r, send) : ""}
       <div class="stats">${running ? `<span>⏱ <b>${fmtUp(r.uptime)}</b></span>` + (p.fps?`<span>fps <b>${p.fps}</b></span><span><b>${p.bitrate}</b></span><span>speed <b>${p.speed}</b></span>`:"") + (r.restarts?`<span>restarts <b>${r.restarts}</b></span>`:"") : (st==="restarting"?"restarting…":"")}</div>
       ${r.error && !running ? `<div class="err">${esc(r.error)}</div>` : ""}
+      ${r.pace_off && running ? `<div class="hint">Smooth sending: packet pacing was switched off on this PC after it overflowed (constant bitrate still on).</div>` : ""}
       <div class="actions">
         ${running ? `<button class="small stop" onclick="act('${s.id}','stop')">■ Stop</button><button class="small" onclick="act('${s.id}','restart')">↻ Restart</button>`
                   : `<button class="small go" onclick="act('${s.id}','start')">▶ ${send?"Start":"Open"}</button>`}
@@ -649,7 +675,7 @@ async function quickApply(id){
 function strip(s){ const c={...s}; delete c.runtime; delete c.command; delete c.watch_url; return c; }
 
 /* ---------- editor ---------- */
-const DEFAULTS = {name:"New portal", role:"send", engine:"ffmpeg", source_type:"file", source:"", loop:true, audio_channels:2, draw_mouse:true, test_pattern:"testsrc2", test_color:"#1e1b4b", test_media:"", test_tone:true,
+const DEFAULTS = {name:"New portal", role:"send", engine:"ffmpeg", source_type:"file", source:"", loop:true, audio_channels:2, draw_mouse:true, desktop_audio:"", smooth_send:true, test_pattern:"testsrc2", test_color:"#1e1b4b", test_media:"", test_tone:true,
   dest_ip:"239.192.1.1", dest_port:5000, ttl:4, pkt_size:1316, local_addr:"", source_filter:"", video_mode:"h264", video_encoder:"libx264",
   video_bitrate:8000, width:1920, height:1080, fps:30, gop:60, audio_mode:"aac", audio_bitrate:192, network_caching:300,
   extra_args:"", auto_restart:true, autostart:false};
@@ -662,6 +688,7 @@ function openEditor(id){
   for (const [k,v] of Object.entries(s)){
     const el = f.elements[k]; if (!el) continue;
     if (el.name === "local_addr") setAdapterValue(el, v);
+    else if (el.name === "desktop_audio") { el.dataset.want = v || ""; fillSound(""); }
     else if (el.type === "checkbox") el.checked = !!v; else el.value = v ?? "";
   }
   document.getElementById("devList").textContent = "";
@@ -670,7 +697,9 @@ function openEditor(id){
   editing = true; document.getElementById("editor").classList.add("show");
   if (!ENCODERS) loadEncoders().then(()=>syncFormVisibility()); else labelEncoders();
   document.getElementById("screenPrev").style.display = "none"; document.getElementById("screenPrevMsg").textContent = "";
-  if (s.source_type === "desktop") loadMonitors().then(previewScreen);
+  document.getElementById("soundSel").dataset.want = s.desktop_audio || "";
+  if (!SOUND_DEVS) fillSound(""); 
+  if (s.source_type === "desktop"){ loadMonitors().then(previewScreen); loadSoundDevices(); }
   f.name.focus();
 }
 
@@ -685,7 +714,7 @@ document.addEventListener("change", e=>{
   if (e.target && e.target.name === "source_type" && e.target.value === "desktop"){
     const f = document.getElementById("edForm");
     if (!/^(desktop|screen:\d+|title=.*)$/.test(f.source.value.trim())) f.source.value = "desktop";
-    loadMonitors().then(previewScreen);
+    loadMonitors().then(previewScreen); loadSoundDevices();
   }
 });
 document.addEventListener("input", e=>{
@@ -713,7 +742,8 @@ function syncFormVisibility(){
   const pn = presetName({width:f.width.value, height:f.height.value, fps:f.fps.value});
   document.getElementById("presetSel").value = pn || "custom";
   const amode = f.audio_mode.value, ch = +f.audio_channels.value;
-  document.querySelectorAll(".aud-enc").forEach(e=>e.classList.toggle("hidden", amode!=="aac" || st==="desktop"));
+  const deskSound = st==="desktop" && f.desktop_audio.value;
+  document.querySelectorAll(".aud-enc").forEach(e=>e.classList.toggle("hidden", amode==="none" || (st==="desktop" && !deskSound) || (amode==="copy" && st!=="desktop")));
   document.getElementById("ch16opt").textContent = (isTest && pat!=="video") ? "16 ch (8 stereo tracks)" : "16 ch (keep all source tracks)";
   const hints = [];
   const enc = ENCODERS && ENCODERS[f.video_encoder.value];
@@ -801,7 +831,20 @@ async function saveStream(){
 }
 
 function copyCmd(){ copyText(document.getElementById("cmdPreview").textContent); }
-function copyText(t){ navigator.clipboard?.writeText(t).then(()=>toast("Copied","ok"), ()=>toast("Copy failed","bad")); }
+function copyText(t){
+  // navigator.clipboard only works on https:// or localhost - fall back for http://PortalSystem:8080 etc.
+  const fallback = () => {
+    const ta = document.createElement("textarea");
+    ta.value = t; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.top = "-1000px";
+    document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, t.length);
+    let ok = false; try { ok = document.execCommand("copy"); } catch(e) {}
+    document.body.removeChild(ta);
+    toast(ok ? "Copied" : "Couldn't copy - select the text and press Ctrl+C", ok ? "ok" : "bad");
+  };
+  if (navigator.clipboard && window.isSecureContext)
+    navigator.clipboard.writeText(t).then(()=>toast("Copied","ok"), fallback);
+  else fallback();
+}
 
 async function loadDevices(){
   const box = document.getElementById("devList");
