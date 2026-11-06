@@ -1,4 +1,4 @@
-MAGICAL PORTAL SYSTEM v1.6.1  -  UDP stream control for BrightSign (Windows 10/11)
+MAGICAL PORTAL SYSTEM v1.7.0  -  UDP stream control for BrightSign (Windows 10/11)
 ==================================================================================
 
 INSTALL / UPDATE
@@ -38,6 +38,9 @@ USE IT
                   or One window (by title). A snapshot shows exactly what will be sent.
                   Works with any number of screens; the list is read live (use the refresh button
                   after plugging screens in/out). Optional mouse pointer.
+                  Sound: pick a Windows recording device. For the PC's own sound use
+                  "Stereo Mix" (Sound settings > Recording > Show disabled devices > Enable)
+                  or a virtual audio cable (e.g. VB-Audio Cable). Mic / line-in work too.
   Relay           Source type "Network URL" = udp://@239.64.10.0:1234 -> sends it on to the
                   portal's destination. Video "Copy" = pure relay (almost no CPU), or encode to
                   change resolution/bitrate. Joins on your network adapter automatically and
