@@ -1,4 +1,4 @@
-MAGICAL PORTAL SYSTEM v1.7.0  -  UDP stream control for BrightSign (Windows 10/11)
+MAGICAL PORTAL SYSTEM v1.7.2  -  UDP stream control for BrightSign (Windows 10/11)
 ==================================================================================
 
 INSTALL / UPDATE
@@ -75,6 +75,12 @@ ENCODERS (Encoder dropdown shows "works" / "not working here" for this PC)
                      update the NVIDIA driver (or use Intel / CPU).
   Settings > Check encoders re-tests after a driver or FFmpeg update.
   A portal that fails 3 times right after starting stops retrying and shows why.
+
+GLITCHES / "Continuity check failed" IN THE BRIGHTSIGN LOG
+  = UDP packets lost on the way. Keep "Smooth sending" ticked (Advanced, on by default):
+  constant bitrate + evenly paced packets instead of bursts. Also check: wired Ethernet
+  (not Wi-Fi), IGMP snooping + querier on the switch, and that no two portals or devices
+  send to the same multicast address. A short burst of errors when a portal restarts is normal.
 
 NO SIGNAL WHEN RECEIVING?
   1. Settings > Network adapter: pick the card on the video network.
