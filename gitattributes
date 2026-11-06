@@ -1,0 +1,24 @@
+# Magical Portal System - line endings
+# Let Git handle normal text files automatically
+* text=auto
+
+# Windows scripts MUST keep Windows (CRLF) line endings or they can break
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+*.vbs  text eol=crlf
+*.txt  text eol=crlf
+
+# Python / web files use standard (LF) line endings
+*.py   text eol=lf
+*.html text eol=lf
+*.css  text eol=lf
+*.js   text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+
+# Binary files - never touch
+*.ico  binary
+*.png  binary
+*.jpg  binary
+*.zip  binary
