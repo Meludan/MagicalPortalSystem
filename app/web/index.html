@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Magical Portal System</title>
+<link rel="icon" href="/portal.ico">
+<style>
+  :root{
+    --bg:#0b0a16; --panel:#14122a; --panel2:#1b1838; --line:#2c2856; --text:#ece9ff; --muted:#9a95c4;
+    --accent:#8b5cf6; --accent2:#22d3ee; --ok:#34d399; --warn:#fbbf24; --bad:#f87171;
+    --radius:14px; --mono:ui-monospace,"Cascadia Code",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",system-ui,sans-serif;background:
+    radial-gradient(1200px 600px at 85% -10%,#2a1a5e55,transparent 60%),
+    radial-gradient(900px 500px at -10% 110%,#0e4a5a44,transparent 60%),var(--bg);
+    color:var(--text);min-height:100vh}
+  header{display:flex;align-items:center;gap:16px;padding:18px 28px;border-bottom:1px solid var(--line);
+    background:#0b0a16cc;backdrop-filter:blur(8px);position:sticky;top:0;z-index:5}
+  .portal{width:42px;height:42px;border-radius:50%;flex:none;
+    background:conic-gradient(from 0deg,var(--accent),var(--accent2),#f0abfc,var(--accent));
+    animation:spin 6s linear infinite;box-shadow:0 0 22px #8b5cf6aa;position:relative}
+  .portal::after{content:"";position:absolute;inset:7px;border-radius:50%;background:var(--bg)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  h1{font-size:20px;margin:0;letter-spacing:.3px}
+  h1 small{display:block;font-size:12px;color:var(--muted);font-weight:400;margin-top:2px}
+  .spacer{flex:1}
+  .chip{font-size:12px;padding:4px 10px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+  .chip.ok{color:var(--ok);border-color:#34d39955}.chip.bad{color:var(--bad);border-color:#f8717155}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--text);
+    padding:8px 14px;border-radius:10px;transition:.15s}
+  button:hover{border-color:var(--accent);background:#25204a}
+  button.primary{background:linear-gradient(135deg,var(--accent),#6d28d9);border-color:transparent}
+  button.primary:hover{filter:brightness(1.12)}
+  button.go{color:var(--ok)} button.stop{color:var(--bad)} button.small{padding:6px 10px;font-size:13px}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  main{padding:24px 28px;max-width:1400px;margin:0 auto}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;align-items:center}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px}
+  .card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);
+    border-radius:var(--radius);padding:18px;display:flex;flex-direction:column;gap:12px;position:relative}
+  .card.running{border-color:#34d39966;box-shadow:0 0 0 1px #34d39922,0 0 30px #34d39914}
+  .card.error{border-color:#f8717166}
+  .card-head{display:flex;align-items:center;gap:10px}
+  .dot{width:10px;height:10px;border-radius:50%;background:#555;flex:none}
+  .running .dot{background:var(--ok);box-shadow:0 0 10px var(--ok);animation:pulse 1.6s infinite}
+  .restarting .dot{background:var(--warn)} .error .dot{background:var(--bad)}
+  @keyframes pulse{50%{opacity:.4}}
+  .card h3{margin:0;font-size:16px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tag{font-size:11px;text-transform:uppercase;letter-spacing:.6px;padding:3px 8px;border-radius:6px;
+    background:#8b5cf622;color:#c4b5fd}
+  .tag.watch{background:#22d3ee22;color:#67e8f9}
+  .kv{display:grid;grid-template-columns:110px 1fr;gap:4px 10px;font-size:13px}
+  .kv span:nth-child(odd){color:var(--muted)}
+  .kv code,.mono{font-family:var(--mono);font-size:12.5px;word-break:break-all}
+  .stats{display:flex;gap:14px;font-size:12px;color:var(--muted);font-family:var(--mono);min-height:16px}
+  .stats b{color:var(--text);font-weight:500}
+  .err{font-size:12.5px;color:var(--bad);background:#f8717114;border-radius:8px;padding:8px 10px}
+  .actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}
+  /* quick change */
+  .quick{display:flex;gap:6px;align-items:center;background:#0f0d22;border:1px solid var(--line);border-radius:10px;padding:6px}
+  .quick input{background:transparent;border:none;color:var(--text);font-family:var(--mono);font-size:13px;padding:4px 6px;min-width:0}
+  .quick input:focus{outline:1px solid var(--accent);border-radius:6px}
+  .quick .ip{flex:1}.quick .port{width:70px}
+  .quick label{font-size:11px;color:var(--muted);padding-left:4px}
+  /* modal */
+  .backdrop{position:fixed;inset:0;background:#05040dcc;display:none;align-items:flex-start;justify-content:center;
+    z-index:20;overflow:auto;padding:40px 16px}
+  .backdrop.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:18px;width:min(860px,100%);
+    padding:24px;box-shadow:0 30px 80px #000a}
+  .modal h2{margin:0 0 16px;font-size:18px}
+  fieldset{border:1px solid var(--line);border-radius:12px;padding:14px;margin:0 0 14px}
+  legend{color:#c4b5fd;font-size:13px;padding:0 6px}
+  .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .f{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)}
+  .f.wide{grid-column:1/-1}
+  input,select,textarea{font:inherit;font-size:14px;background:#0f0d22;color:var(--text);border:1px solid var(--line);
+    border-radius:9px;padding:8px 10px;width:100%}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+  .check{flex-direction:row;align-items:center;gap:8px;color:var(--text)}
+  .check input{width:auto}
+  .hint{font-size:12px;color:var(--muted);line-height:1.45}
+  .cmd{background:#07060f;border:1px solid var(--line);border-radius:10px;padding:12px;font-family:var(--mono);
+    font-size:12.5px;color:#a5f3fc;white-space:pre-wrap;word-break:break-all;max-height:160px;overflow:auto}
+  .cmd.bad{color:var(--bad)}
+  .modal-foot{display:flex;gap:10px;justify-content:flex-end;align-items:center;margin-top:8px;flex-wrap:wrap}
+  .log{background:#07060f;border:1px solid var(--line);border-radius:10px;padding:12px;font-family:var(--mono);
+    font-size:12px;height:55vh;overflow:auto;white-space:pre-wrap;word-break:break-all;color:#d4d0f5}
+  .toast{position:fixed;bottom:22px;right:22px;background:var(--panel2);border:1px solid var(--line);
+    padding:12px 16px;border-radius:12px;max-width:420px;z-index:50;font-size:14px;display:none;white-space:pre-wrap}
+  .toast.show{display:block}.toast.bad{border-color:var(--bad)}.toast.ok{border-color:var(--ok)}
+  .bs{font-size:13px;line-height:1.55}
+  .bs code{background:#0f0d22;padding:2px 6px;border-radius:5px;font-family:var(--mono);color:#a5f3fc}
+  .empty{text-align:center;color:var(--muted);padding:60px 0}
+  .sig{font-size:12.5px;padding:6px 10px;border-radius:8px;display:flex;gap:8px;align-items:center}
+  .sig.ok{background:#34d39914;color:var(--ok)} .sig.waiting{background:#fbbf2414;color:var(--warn)}
+  .sig.lost{background:#f8717114;color:var(--bad)}
+  .probe{margin-top:10px;font-size:13px;background:#0f0d22;border:1px solid var(--line);border-radius:10px;padding:10px 12px;white-space:pre-wrap;line-height:1.5}
+  .probe.good{border-color:#34d39966}.probe.badp{border-color:#f8717166}
+  .probe ul{margin:6px 0 0;padding-left:18px;color:var(--muted)}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <div class="portal"></div>
+  <h1>Magical Portal System <span id="ver" style="font-size:12px;color:var(--muted);font-weight:400"></span><small>UDP stream control for BrightSign · FFmpeg &amp; VLC</small></h1>
+  <div class="spacer"></div>
+  <span id="chipFfmpeg" class="chip">FFmpeg</span>
+  <span id="chipVlc" class="chip">VLC</span>
+  <button onclick="openSettings()">⚙ Settings</button>
+  <button class="stop" onclick="shutdown()" title="Stop all streams and close the Magical Portal System">⏻ Shut down</button>
+</header>
+
+<main>
+  <div class="toolbar">
+    <button class="primary" onclick="openEditor()">＋ New portal</button>
+    <button class="go" onclick="api('/api/start-all',{}).then(refresh)">▶ Start all senders</button>
+    <button class="stop" onclick="api('/api/stop-all',{}).then(refresh)">■ Stop all</button>
+    <div class="spacer"></div>
+    <button onclick="openHelp()">BrightSign setup help</button>
+  </div>
+  <div id="grid" class="grid"></div>
+  <div id="empty" class="empty hidden">No portals yet. Click <b>＋ New portal</b> to create your first UDP stream.</div>
+</main>
+
+<!-- Stream editor -->
+<div id="editor" class="backdrop" onclick="if(event.target===this)closeModal('editor')">
+  <div class="modal">
+    <h2 id="edTitle">New portal</h2>
+    <form id="edForm" oninput="schedulePreview()" onchange="syncFormVisibility();schedulePreview()" onsubmit="return false">
+      <input type="hidden" name="id">
+      <fieldset>
+        <legend>Basics</legend>
+        <div class="row">
+          <label class="f wide">Name<input name="name" required placeholder="Lobby screen feed"></label>
+          <label class="f">What should it do?
+            <select name="role">
+              <option value="send">Send a stream (PC → BrightSign)</option>
+              <option value="watch">Watch a UDP stream on this PC</option>
+            </select>
+          </label>
+          <label class="f">Program
+            <select name="engine"></select>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset class="send-only">
+        <legend>Source</legend>
+        <div class="row">
+          <label class="f">Source type
+            <select name="source_type">
+              <option value="file">Video file</option>
+              <option value="url">Network URL (udp / rtsp / http / srt)</option>
+              <option value="desktop">Windows desktop capture</option>
+              <option value="dshow">Capture card / webcam (DirectShow)</option>
+              <option value="test">Test source (pattern / picture / video)</option>
+            </select>
+          </label>
+          <label class="f wide src-input">
+            <span id="srcLabel">Source</span>
+            <span style="display:flex;gap:6px"><input name="source" placeholder="">
+            <button type="button" class="small file-browse" onclick="browse('source')">Browse…</button></span>
+            <span class="hint" id="srcHint"></span>
+          </label>
+          <label class="f test-only">Show
+            <select name="test_pattern">
+              <option value="testsrc2">Moving test card (default)</option>
+              <option value="smptehdbars">HD colour bars</option>
+              <option value="color">Solid colour</option>
+              <option value="image">My picture</option>
+              <option value="video">My video (loops)</option>
+            </select>
+          </label>
+          <label class="f test-color-only">Colour<input type="color" name="test_color" style="height:40px;padding:3px"></label>
+          <label class="f wide test-media-only"><span id="mediaLabel">File</span>
+            <span style="display:flex;gap:6px"><input name="test_media" class="mono" placeholder="C:\Media\slate.png">
+            <button type="button" class="small" onclick="browse('test_media')">Browse…</button></span>
+            <span class="hint" id="mediaHint"></span>
+          </label>
+          <label class="f check test-tone-only"><input type="checkbox" name="test_tone"> 1 kHz test tone (untick for silence)</label>
+          <div class="f wide desktop-only">
+            <span>Screen to capture</span>
+            <span style="display:flex;gap:6px">
+              <select id="screenSel" onchange="pickScreen(this.value)"></select>
+              <button type="button" class="small" onclick="loadMonitors(true)" title="Re-read the screens from Windows">↻</button>
+            </span>
+            <label class="f check" style="margin-top:6px"><input type="checkbox" name="draw_mouse"> Show the mouse pointer</label>
+            <div style="margin-top:6px">
+              <img id="screenPrev" alt="" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--line);display:none">
+              <div class="hint" id="screenPrevMsg"></div>
+            </div>
+          </div>
+          <div class="f wide dshow-only">
+            <button type="button" class="small" onclick="loadDevices()">🔍 Find capture devices</button>
+            <div id="devList" class="hint"></div>
+          </div>
+          <label class="f check file-only"><input type="checkbox" name="loop"> Loop the file forever</label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend id="destLegend">UDP destination</legend>
+        <div class="row">
+          <label class="f">IP address<input name="dest_ip" placeholder="239.192.1.1 or 192.168.1.50"></label>
+          <label class="f">Port<input name="dest_port" type="number" min="1" max="65535"></label>
+          <label class="f send-only">Multicast TTL<input name="ttl" type="number" min="1" max="255"></label>
+          <label class="f send-only">Packet size<input name="pkt_size" type="number"></label>
+          <label class="f wide">Network adapter
+            <span style="display:flex;gap:6px"><select name="local_addr" class="adapter-select" data-default-label="Use default from Settings"></select>
+            <button type="button" class="small" onclick="loadAdapters(true)" title="Refresh adapter list">↻</button></span>
+            <span class="hint">The network card that is on the same network as the stream / BrightSigns.</span>
+          </label>
+          <label class="f watch-only">Only from sender IP (optional)<input name="source_filter" placeholder="SSM sender, e.g. 10.0.0.20"></label>
+          <label class="f watch-only">Player buffer (ms)<input name="network_caching" type="number"></label>
+        </div>
+        <p class="hint" id="destHint"></p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button type="button" class="small" onclick="testSignal()">📡 Test signal</button>
+          <span class="hint">Listens for 6 seconds on the address and adapter above and tells you what's arriving.</span>
+        </div>
+        <div id="probeResult" class="probe hidden"></div>
+      </fieldset>
+
+      <fieldset class="send-only">
+        <legend>Encoding</legend>
+        <div class="row">
+          <label class="f">Video
+            <select name="video_mode">
+              <option value="h264">Encode to H.264</option>
+              <option value="copy">Copy (no re-encode)</option>
+            </select>
+          </label>
+          <label class="f enc-only ffmpeg-only">Encoder
+            <select name="video_encoder">
+              <option value="libx264">CPU (libx264)</option>
+              <option value="h264_nvenc">NVIDIA (h264_nvenc)</option>
+              <option value="h264_qsv">Intel Quick Sync (h264_qsv)</option>
+              <option value="h264_amf">AMD (h264_amf)</option>
+            </select>
+          </label>
+          <label class="f enc-only">Preset
+            <select id="presetSel" onchange="applyPreset(this.value)">
+              <option value="custom">Custom</option>
+              <option value="480p">480p (854×480, 30 fps)</option>
+              <option value="720p">720p (1280×720, 30 fps)</option>
+              <option value="1080p30">1080p30 (1920×1080, 30 fps)</option>
+              <option value="1080p60">1080p60 (1920×1080, 60 fps)</option>
+              <option value="4k30">4K30 (3840×2160, 30 fps)</option>
+            </select>
+          </label>
+          <label class="f enc-only">Bitrate (kbps)<input name="video_bitrate" type="number"></label>
+          <label class="f enc-only">Width<input name="width" type="number"></label>
+          <label class="f enc-only">Height<input name="height" type="number"></label>
+          <label class="f enc-only">FPS<input name="fps" type="number"></label>
+          <label class="f enc-only">Keyframe every (frames)<input name="gop" type="number"></label>
+          <label class="f">Audio
+            <select name="audio_mode">
+              <option value="aac">AAC</option>
+              <option value="copy">Copy</option>
+              <option value="none">No audio</option>
+            </select>
+          </label>
+          <label class="f aud-enc">Channels
+            <select name="audio_channels">
+              <option value="1">Mono (1 ch)</option>
+              <option value="2">Stereo (2 ch)</option>
+              <option value="6">5.1 surround (6 ch)</option>
+              <option value="8">7.1 surround (8 ch)</option>
+              <option value="16" id="ch16opt">16 ch (8 stereo tracks)</option>
+            </select>
+          </label>
+          <label class="f aud-enc">Audio kbps (per 2 ch)<input name="audio_bitrate" type="number"></label>
+        </div>
+        <p class="hint" id="encHint"></p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Advanced</legend>
+        <div class="row">
+          <label class="f wide">Extra arguments (added before the output)<input name="extra_args" class="mono" placeholder="-muxrate 10M"></label>
+          <label class="f check send-only"><input type="checkbox" name="auto_restart"> Auto-restart if it stops</label>
+          <label class="f check send-only"><input type="checkbox" name="autostart"> Start when the system starts</label>
+        </div>
+      </fieldset>
+
+      <div class="f">Command that will run
+        <div id="cmdPreview" class="cmd">…</div>
+      </div>
+
+      <div class="modal-foot">
+        <label class="f check" style="margin-right:auto"><input type="checkbox" id="restartIfRunning" checked> Apply now (restart if running)</label>
+        <button type="button" onclick="copyCmd()">Copy command</button>
+        <button type="button" onclick="closeModal('editor')">Cancel</button>
+        <button type="button" class="primary" onclick="saveStream()">Save portal</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Settings -->
+<div id="settings" class="backdrop" onclick="if(event.target===this)closeModal('settings')">
+  <div class="modal">
+    <h2>Settings</h2>
+    <fieldset>
+      <legend>Programs</legend>
+      <div class="row">
+        <label class="f wide">FFmpeg path<input id="setFfmpeg" class="mono" placeholder="C:\ffmpeg\bin\ffmpeg.exe"></label>
+        <label class="f wide">VLC path<input id="setVlc" class="mono" placeholder="C:\Program Files\VideoLAN\VLC\vlc.exe"></label>
+        <label class="f">Auto-restart delay (sec)<input id="setDelay" type="number" min="1"></label>
+      </div>
+      <p class="hint">Get FFmpeg with <code class="mono">winget install Gyan.FFmpeg</code> (or unzip it to <code class="mono">C:\ffmpeg</code>). Get VLC from videolan.org.</p>
+    </fieldset>
+    <fieldset>
+      <legend>Network</legend>
+      <div class="row">
+        <label class="f wide">Default network adapter
+          <span style="display:flex;gap:6px"><select id="setAdapter" class="adapter-select" data-default-label="Automatic (let Windows choose)"></select>
+          <button type="button" class="small" onclick="loadAdapters(true)">↻</button></span>
+          <span class="hint">Used by every portal that doesn't pick its own adapter. If the PC has more than one network card (or Wi-Fi + Ethernet / VPN), pick the one on the video network.</span>
+        </label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Web page (this control page)</legend>
+      <div class="row">
+        <label class="f">Name<input id="setName" placeholder="PortalSystem" oninput="syncWebHint()"></label>
+        <label class="f">Port<input id="setPort" type="number" min="1024" max="65535" oninput="syncWebHint()"></label>
+        <label class="f">Who can open it
+          <select id="setAccess" onchange="syncWebHint()">
+            <option value="local">This PC only (safest)</option>
+            <option value="network">Other PCs / phones on the network too</option>
+          </select>
+        </label>
+        <label class="f">Password for other devices
+          <input id="setPw" type="password" autocomplete="new-password" placeholder="leave empty = no change">
+        </label>
+        <label class="f check" id="pwClearRow"><input type="checkbox" id="setPwClear"> Remove the password</label>
+      </div>
+      <p class="hint" id="webHint"></p>
+      <div id="nameFixRow" class="hidden" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button type="button" class="small" onclick="fixName()">Make the name work on this PC</button>
+        <span class="hint">Adds it to Windows (one admin prompt). Until then use http://localhost:<span id="fixPort"></span></span>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Notifications</legend>
+      <label class="f check"><input type="checkbox" id="setNotify"> Show a Windows pop-up when a portal loses its signal or stops with an error</label>
+      <p class="hint">Comes from the Magical Portal System icon in the hidden icons area (^) next to the clock. Left-click that icon to open this page, right-click it for Start all / Stop all / Shut down.</p>
+    </fieldset>
+    <fieldset>
+      <legend>Windows Firewall</legend>
+      <p class="hint" style="margin-top:0">If receiving shows no signal, Windows Firewall may be blocking it. Open <b>Terminal (Admin)</b> and paste these once:</p>
+      <div id="fwCmds" class="cmd" style="max-height:200px">…</div>
+      <div style="margin-top:8px"><button type="button" class="small" onclick="copyText(document.getElementById('fwCmds').textContent)">Copy firewall commands</button></div>
+      <p class="hint">Also make sure the video network is set to <b>Private</b> (Settings → Network &amp; internet → your adapter → Network profile type).</p>
+    </fieldset>
+    <div class="modal-foot">
+      <button onclick="detectTools()">Auto-detect</button>
+      <button onclick="loadEncoders(true)" title="Test which video encoders (CPU / NVIDIA / Intel / AMD) work on this PC">Check encoders</button>
+      <button onclick="closeModal('settings')">Cancel</button>
+      <button class="primary" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Log -->
+<div id="logModal" class="backdrop" onclick="if(event.target===this)closeLog()">
+  <div class="modal" style="width:min(1100px,100%)">
+    <h2 id="logTitle">Log</h2>
+    <div id="logBox" class="log"></div>
+    <div class="modal-foot">
+      <button onclick="copyText(document.getElementById('logBox').textContent)">Copy log</button>
+      <button onclick="closeLog()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Help -->
+<div id="help" class="backdrop" onclick="if(event.target===this)closeModal('help')">
+  <div class="modal bs">
+    <h2>Getting the stream onto a BrightSign</h2>
+    <p><b>1. Pick an address.</b> Multicast (e.g. <code>239.192.1.1:5000</code>) lets any number of players and this PC watch the same stream. Unicast (the BrightSign's own IP, e.g. <code>192.168.1.50:5000</code>) sends to one player only.</p>
+    <p><b>2. On the BrightSign</b> (BrightAuthor:connected) add a <i>Video Stream</i> / <i>Streaming</i> state and enter the URL shown on each portal card, e.g. <code>udp://239.192.1.1:5000</code>. For unicast use the port only, e.g. <code>udp://0.0.0.0:5000</code>. Check the exact syntax against your BrightSign OS version's docs.</p>
+    <p><b>3. Safe settings for BrightSign:</b> H.264, MPEG-TS, 1920×1080 at 30 or 60 fps, 6–15 Mbps, keyframe every 1–2 seconds, AAC 48 kHz audio, packet size 1316. Keep the stream at a constant bitrate.</p>
+    <p><b>4. Network:</b> for multicast, the switch should have IGMP snooping (and a querier) on, or multicast will flood the network. Allow the program through Windows Firewall when Windows asks. If the PC has several network cards, put its IP in <i>Send from NIC IP</i>.</p>
+    <p><b>5. Check it:</b> click <b>📡 Test</b> on any portal to listen for 6 seconds and see what's arriving, or <b>Preview in VLC</b> on a multicast portal to watch exactly what the players receive.</p>
+    <p><b>6. No signal when receiving?</b> (a) In Settings, pick the <b>network adapter</b> that is on the video network. Windows often picks Wi-Fi, a VPN or the office network instead. (b) Paste the <b>firewall commands</b> from Settings into Terminal (Admin). (c) Set that network to <b>Private</b> in Windows. (d) Make sure the switch passes multicast (IGMP snooping with a querier).</p>
+    <div class="modal-foot"><button onclick="closeModal('help')">Close</button></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const PATTERNS = {testsrc2:"Moving test card", smptehdbars:"HD colour bars", color:"Solid colour", image:"My picture", video:"My video"};
+const baseName = p => (p||"").split(/[\\/]/).pop();
+let ENCODERS = null;
+const ENC_LABELS = {libx264:"CPU (libx264)", h264_nvenc:"NVIDIA (h264_nvenc)", h264_qsv:"Intel Quick Sync (h264_qsv)", h264_amf:"AMD (h264_amf)"};
+async function loadEncoders(recheck){
+  const j = await fetch("/api/encoders" + (recheck ? "?recheck=1" : "")).then(r=>r.json()).catch(()=>null);
+  if (j) ENCODERS = j.encoders;
+  labelEncoders();
+  if (recheck && ENCODERS) toast("Working encoders: " + Object.keys(ENCODERS).filter(k=>ENCODERS[k].ok).map(k=>ENC_LABELS[k]).join(", "), "ok", 8000);
+}
+function labelEncoders(){
+  const sel = document.querySelector("select[name=video_encoder]");
+  if (!sel || !ENCODERS) return;
+  for (const o of sel.options){
+    const e = ENCODERS[o.value]; if (!e) continue;
+    o.textContent = ENC_LABELS[o.value] + (e.ok ? "  ✓ works" : "  ✗ not working here");
+    o.title = e.reason || "";
+  }
+}
+let MONITORS = [];
+const screenLabel = m => `Screen ${m.num} – ${m.w}×${m.h}${m.primary?" (main)":""}`;
+async function loadMonitors(announce){
+  const j = await fetch("/api/monitors").then(r=>r.json()).catch(()=>({monitors:[]}));
+  MONITORS = j.monitors || [];
+  fillScreens();
+  if (announce) toast(`Found ${MONITORS.length} screen(s)`);
+}
+function fillScreens(){
+  const f = document.getElementById("edForm"), sel = document.getElementById("screenSel");
+  if (!sel) return;
+  const cur = (f.source.value || "desktop").trim();
+  const opts = [["desktop", MONITORS.length > 1 ? `All screens together (${MONITORS.length})` : "Whole screen"]]
+    .concat(MONITORS.map(m=>[`screen:${m.num}`, screenLabel(m)]))
+    .concat([["window", "One window (by title)…"]]);
+  let val = cur.startsWith("title=") ? "window" : cur;
+  if (!opts.some(o=>o[0]===val) && /^screen:\d+$/.test(val)) opts.splice(1, 0, [val, `Screen ${val.split(":")[1]} – not connected now`]);
+  sel.innerHTML = opts.map(([v,l])=>`<option value="${v}">${esc(l)}</option>`).join("");
+  sel.value = opts.some(o=>o[0]===val) ? val : "desktop";
+  syncScreenInputs();
+}
+function syncScreenInputs(){
+  const f = document.getElementById("edForm");
+  const isDesk = f.source_type.value === "desktop", win = document.getElementById("screenSel").value === "window";
+  document.querySelector(".src-input").classList.toggle("hidden", f.source_type.value==="test" || (isDesk && !win));
+}
+function pickScreen(v){
+  const f = document.getElementById("edForm");
+  if (v === "window"){ if (!f.source.value.startsWith("title=")) f.source.value = "title="; f.source.focus(); }
+  else f.source.value = v;
+  syncScreenInputs(); schedulePreview(0); previewScreen();
+}
+let _prevTimer = null;
+function previewScreen(){
+  const f = document.getElementById("edForm"), img = document.getElementById("screenPrev"), msg = document.getElementById("screenPrevMsg");
+  if (f.source_type.value !== "desktop" || f.role.value !== "send") return;
+  const src = f.source.value.trim() || "desktop";
+  if (src === "title="){ img.style.display = "none"; msg.textContent = "Type the window title after title="; return; }
+  msg.textContent = "Taking a snapshot…";
+  const probe = new Image();
+  probe.onload = () => { img.src = probe.src; img.style.display = "block"; msg.textContent = "Snapshot of what will be streamed (↻ to refresh)."; };
+  probe.onerror = () => { img.style.display = "none"; msg.textContent = "Couldn't take a snapshot – check the screen/window choice."; };
+  probe.src = "/api/screen-preview?src=" + encodeURIComponent(src) + "&t=" + Date.now();
+}
+let STOPPED = false, STATE = null, previewTimer = null, logTimer = null, logId = null, editing = false, ADAPTERS = [];
+
+const SRC_INFO = {
+  file:{label:"Video file path", ph:"C:\\Videos\\loop.mp4", hint:"Full path to an .mp4 / .ts / .mov file on this PC. Tip: in File Explorer, Shift + right-click the file → Copy as path."},
+  url:{label:"Source URL", ph:"udp://@239.64.10.0:1234", hint:"Relay / re-encode another stream: udp://239.x.x.x:port (joins on your network adapter automatically, reconnects if it drops), rtsp://, http(s)://, srt://… Set Video to Copy for a pure relay (almost no CPU)."},
+  desktop:{label:"Window title", ph:"title=PowerPoint Slide Show", hint:"The exact title shown on the window's title bar, after title= (FFmpeg)."},
+  dshow:{label:"DirectShow device", ph:"video=Cam Link 4K:audio=Digital Audio Interface (Cam Link 4K)", hint:"Format: video=Device Name:audio=Audio Device Name. Use Find capture devices below."},
+  test:{label:"", ph:"", hint:""},
+};
+
+async function api(url, body){
+  const opt = body === undefined ? {} : {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)};
+  const r = await fetch(url, opt);
+  const j = await r.json().catch(()=>({ok:false,error:"Bad response"}));
+  if (j.ok === false && j.error) toast(j.error, "bad");
+  if (j.note) toast(j.note);
+  return j;
+}
+
+function toast(msg, kind="", ms=5000){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.className = "toast show " + kind;
+  clearTimeout(t._h); t._h = setTimeout(()=>t.className="toast", ms);
+}
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmtUp = s => { const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return (h?h+"h ":"")+(h||m?m+"m ":"")+x+"s"; };
+const isMulticast = ip => { const a = parseInt((ip||"").split(".")[0]); return a>=224 && a<=239; };
+
+async function refresh(){
+  if (STOPPED) return;
+  try { STATE = await api("/api/state"); } catch(e){ toast("Lost connection to the Magical Portal System server. Is server.py still running?", "bad"); return; }
+  const t = STATE.tools;
+  setChip("chipFfmpeg", "FFmpeg", t.ffmpeg); setChip("chipVlc", "VLC", t.vlc);
+  document.getElementById("ver").textContent = (STATE.version ? "v" + STATE.version : "") + (STATE.web && STATE.web.page_url ? " · " + STATE.web.page_url.replace("http://","") : "");
+  render();
+}
+function setChip(id, name, ok){ const c=document.getElementById(id); c.textContent=(ok?"● ":"○ ")+name+(ok?"":" missing"); c.className="chip "+(ok?"ok":"bad"); }
+
+function render(){
+  const grid = document.getElementById("grid");
+  if (document.activeElement && document.activeElement.tagName === "SELECT" && grid.contains(document.activeElement)) return;
+  document.getElementById("empty").classList.toggle("hidden", STATE.streams.length > 0);
+  // don't wipe quick-edit fields the user is typing in
+  const focused = document.activeElement;
+  const keepFocus = focused && focused.dataset && focused.dataset.quick ? {id:focused.dataset.sid, f:focused.dataset.quick, v:focused.value, pos:focused.selectionStart} : null;
+
+  grid.innerHTML = STATE.streams.map(s => {
+    const r = s.runtime, st = r.status, running = st === "running" || st === "restarting";
+    const send = s.role === "send";
+    const deskText = (()=>{ const v=(s.source||"desktop").trim(); const m=/^screen:(\d+)$/.exec(v);
+      if (m){ const mon = MONITORS.find(x=>x.num===+m[1]); return mon ? screenLabel(mon) : `Screen ${m[1]}`; }
+      return v.startsWith("title=") ? "Window: " + v.slice(6) : "All screens"; })();
+    const srcText = {file:s.source, url:s.source, desktop:deskText, dshow:s.source, test:""}[s.source_type];
+    const p = r.progress || {};
+    return `<div class="card ${st}">
+      <div class="card-head"><span class="dot"></span><h3 title="${esc(s.name)}">${esc(s.name)}</h3>
+        <span class="tag ${send?"":"watch"}">${send?"send":"watch"} · ${esc(s.engine)}</span></div>
+      <div class="quick">
+        <label>${send?"to":"from"}</label>
+        <input class="ip" data-quick="dest_ip" data-sid="${s.id}" value="${esc(s.dest_ip)}" placeholder="IP" onkeydown="quickKey(event)">
+        <span style="color:var(--muted)">:</span>
+        <input class="port" data-quick="dest_port" data-sid="${s.id}" value="${esc(s.dest_port)}" onkeydown="quickKey(event)">
+        <button class="small" onclick="quickApply('${s.id}')" title="Save and apply (restarts if running)">Apply</button>
+      </div>
+      <div class="kv">
+        ${send?`${s.source_type==="test" ? `<span>Showing</span><span style="display:flex;gap:6px;align-items:center;min-width:0">
+            <select class="small-select" onchange="quickPattern('${s.id}', this.value)" style="padding:3px 6px;font-size:13px;width:auto">
+              ${Object.entries(PATTERNS).map(([v,l])=>`<option value="${v}" ${v===s.test_pattern?"selected":""}>${l}</option>`).join("")}
+            </select>${["image","video"].includes(s.test_pattern)?`<code title="${esc(s.test_media)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(baseName(s.test_media))}</code>`:""}</span>`
+          : `<span>Source</span><code>${esc(srcText||"—")}</code>`}
+        <span>Video</span><span>${s.video_mode==="copy"&&!["desktop","dshow","test"].includes(s.source_type)?"copy":`${presetName(s)?presetName(s).replace("4k","4K")+" · ":""}H.264 ${s.width}×${s.height} @${s.fps} · ${s.video_bitrate} kbps`}</span>
+        <span>Audio</span><span>${s.audio_mode==="none"||s.source_type==="desktop"?"none":s.audio_mode==="copy"&&!["test","dshow"].includes(s.source_type)?"copy":({1:"Mono",2:"Stereo",6:"5.1",8:"7.1",16:"16 ch (8 tracks)"}[s.audio_channels]||"Stereo")+" AAC"}</span>
+        <span>BrightSign URL</span><code>${esc(s.brightsign_url)}</code>`
+        :`<span>Receiving</span><code>${esc(isMulticast(s.dest_ip)?`${s.dest_ip}:${s.dest_port} (multicast)`:`port ${s.dest_port} on this PC`)}</code>`}
+        <span>Adapter</span><span>${esc(adapterLabel(s.adapter_used))}</span>
+      </div>
+      ${running && r.signal ? signalBadge(r, send) : ""}
+      <div class="stats">${running ? `<span>⏱ <b>${fmtUp(r.uptime)}</b></span>` + (p.fps?`<span>fps <b>${p.fps}</b></span><span><b>${p.bitrate}</b></span><span>speed <b>${p.speed}</b></span>`:"") + (r.restarts?`<span>restarts <b>${r.restarts}</b></span>`:"") : (st==="restarting"?"restarting…":"")}</div>
+      ${r.error && !running ? `<div class="err">${esc(r.error)}</div>` : ""}
+      <div class="actions">
+        ${running ? `<button class="small stop" onclick="act('${s.id}','stop')">■ Stop</button><button class="small" onclick="act('${s.id}','restart')">↻ Restart</button>`
+                  : `<button class="small go" onclick="act('${s.id}','start')">▶ ${send?"Start":"Open"}</button>`}
+        ${send?`<button class="small" onclick="act('${s.id}','preview')">${s.preview_running?"✕ Close preview":"👁 Preview in VLC"}</button>`:""}
+        <button class="small" onclick="cardProbe('${s.id}', this)" title="Listen for 6 s and report what arrives">📡 Test</button>
+        <button class="small" onclick="openEditor('${s.id}')">✎ Edit</button>
+        <button class="small" onclick="showLog('${s.id}')">Log</button>
+        <button class="small" onclick="act('${s.id}','duplicate')">⧉</button>
+        <button class="small stop" onclick="if(confirm('Delete ${esc(s.name).replace(/'/g,"")}?'))act('${s.id}','delete')">🗑</button>
+      </div>
+    </div>`;
+  }).join("");
+
+  if (keepFocus){
+    const el = grid.querySelector(`[data-sid="${keepFocus.id}"][data-quick="${keepFocus.f}"]`);
+    if (el){ el.value = keepFocus.v; el.focus(); try{el.setSelectionRange(keepFocus.pos,keepFocus.pos)}catch(e){} }
+  }
+}
+
+function adapterLabel(ip){
+  if (!ip) return "Windows default";
+  const a = ADAPTERS.find(x=>x.ip===ip);
+  return a ? `${a.name} (${ip})` : ip;
+}
+function signalBadge(r, send){
+  const p = r.progress || {};
+  if (r.signal === "ok") return `<div class="sig ok">● ${send?"Sending":"Receiving"} ${esc(r.media||"")} ${p.bitrate&&p.bitrate!=="N/A"?"· "+esc(p.bitrate):""}</div>`;
+  if (r.signal === "starting") return `<div class="sig waiting">◐ Signal found ${esc(r.media||"")} – starting…</div>`;
+  if (r.signal === "waiting") return `<div class="sig waiting">◌ ${send?"Starting…":"Waiting for signal… (nothing has arrived yet)"}</div>`;
+  return `<div class="sig lost">✕ No data for ${send?"a few seconds – sender stalled":"3+ seconds – signal lost"}</div>`;
+}
+async function cardProbe(id, btn){
+  const s = STATE.streams.find(x=>x.id===id);
+  btn.disabled = true; btn.textContent = "📡 Listening…";
+  toast("Listening for 6 seconds…", "", 8000);
+  const r = await api("/api/probe", strip(s));
+  btn.disabled = false; btn.textContent = "📡 Test";
+  if (r.message) toast(r.message + (r.tips ? "\n\n• " + r.tips.join("\n• ") : ""), r.signal ? "ok" : "bad", r.signal ? 8000 : 20000);
+}
+async function testSignal(){
+  const box = document.getElementById("probeResult");
+  box.className = "probe"; box.textContent = "📡 Listening for 6 seconds…";
+  const r = await fetch("/api/probe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(formData())}).then(r=>r.json());
+  if (!r.ok){ box.className="probe badp"; box.textContent = "⚠ " + r.error; return; }
+  box.className = "probe " + (r.signal ? "good" : "badp");
+  box.innerHTML = esc(r.message) + (r.tips ? "<ul>" + r.tips.map(t=>`<li>${esc(t)}</li>`).join("") + "</ul>" : "");
+}
+async function loadAdapters(force){
+  const j = await fetch("/api/adapters").then(r=>r.json()).catch(()=>({adapters:[]}));
+  ADAPTERS = j.adapters || [];
+  fillAdapterSelects();
+  if (force) toast(`Found ${ADAPTERS.length} network adapter(s)`);
+}
+function fillAdapterSelects(){
+  document.querySelectorAll(".adapter-select").forEach(sel=>{
+    const cur = sel.value;
+    const opts = [`<option value="">${esc(sel.dataset.defaultLabel)}</option>`].concat(ADAPTERS.map(a=>
+      `<option value="${esc(a.ip)}">${esc(a.name)} — ${esc(a.ip)}${a.status&&a.status!=="Up"?" ("+esc(a.status)+")":""}${a.apipa?" (no DHCP address!)":""}</option>`));
+    sel.innerHTML = opts.join("");
+    setAdapterValue(sel, cur);
+  });
+}
+function setAdapterValue(sel, v){
+  v = v || "";
+  if (v && ![...sel.options].some(o=>o.value===v)) sel.insertAdjacentHTML("beforeend", `<option value="${esc(v)}">${esc(v)} (saved – not found on this PC)</option>`);
+  sel.value = v;
+}
+
+async function act(id, action){ await api(`/api/streams/${id}/${action}`, {}); refresh(); }
+
+async function quickPattern(id, pat){
+  const s = STATE.streams.find(x=>x.id===id);
+  document.activeElement.blur();
+  if (["image","video"].includes(pat) && !s.test_media){
+    openEditor(id);
+    const f = document.getElementById("edForm");
+    f.test_pattern.value = pat; syncFormVisibility(); schedulePreview(0);
+    toast(`Pick the ${pat==="image"?"picture":"video"} to show, then Save.`);
+    return;
+  }
+  if (["image","video"].includes(pat) && s.test_media){
+    const ext = (s.test_media.split(".").pop()||"").toLowerCase();
+    const isImg = ["png","jpg","jpeg","bmp","gif","webp","tif","tiff"].includes(ext);
+    if ((pat==="image") !== isImg){ openEditor(id); const f=document.getElementById("edForm"); f.test_pattern.value=pat; f.test_media.value=""; syncFormVisibility(); schedulePreview(0); toast(`Pick the ${pat==="image"?"picture":"video"} to show, then Save.`); return; }
+  }
+  const j = await api("/api/streams", {...strip(s), test_pattern:pat, restart_if_running:true});
+  if (j.ok) toast(j.restarted ? `Now showing: ${PATTERNS[pat]} ✨` : `Saved – shows ${PATTERNS[pat]} when started`, "ok");
+  refresh();
+}
+async function browse(field){
+  const f = document.getElementById("edForm");
+  const kind = field === "source" ? "video" : (f.test_pattern.value === "image" ? "image" : "video");
+  toast("A file window opened on the PC running Magical Portal System…", "", 4000);
+  const j = await api("/api/browse/" + kind, {});
+  if (j.ok && j.path){ f.elements[field].value = j.path; schedulePreview(0); toast("Picked " + baseName(j.path), "ok"); }
+}
+
+function quickKey(e){ if(e.key==="Enter") quickApply(e.target.dataset.sid); }
+async function quickApply(id){
+  const s = STATE.streams.find(x=>x.id===id);
+  const ip = document.querySelector(`[data-sid="${id}"][data-quick="dest_ip"]`).value.trim();
+  const port = document.querySelector(`[data-sid="${id}"][data-quick="dest_port"]`).value.trim();
+  document.activeElement.blur();
+  const j = await api("/api/streams", {...strip(s), dest_ip:ip, dest_port:port, restart_if_running:true});
+  if (j.ok) toast(j.restarted ? `Portal re-pointed to ${ip}:${port} and restarted ✨` : `Saved ${ip}:${port}`, "ok");
+  refresh();
+}
+function strip(s){ const c={...s}; delete c.runtime; delete c.command; delete c.watch_url; return c; }
+
+/* ---------- editor ---------- */
+const DEFAULTS = {name:"New portal", role:"send", engine:"ffmpeg", source_type:"file", source:"", loop:true, audio_channels:2, draw_mouse:true, test_pattern:"testsrc2", test_color:"#1e1b4b", test_media:"", test_tone:true,
+  dest_ip:"239.192.1.1", dest_port:5000, ttl:4, pkt_size:1316, local_addr:"", source_filter:"", video_mode:"h264", video_encoder:"libx264",
+  video_bitrate:8000, width:1920, height:1080, fps:30, gop:60, audio_mode:"aac", audio_bitrate:192, network_caching:300,
+  extra_args:"", auto_restart:true, autostart:false};
+
+function openEditor(id){
+  const f = document.getElementById("edForm");
+  const s = id ? strip(STATE.streams.find(x=>x.id===id)) : {...DEFAULTS, id:""};
+  document.getElementById("edTitle").textContent = id ? `Edit portal – ${s.name}` : "New portal";
+  f.role.value = s.role; fillEngines(s.engine);
+  for (const [k,v] of Object.entries(s)){
+    const el = f.elements[k]; if (!el) continue;
+    if (el.name === "local_addr") setAdapterValue(el, v);
+    else if (el.type === "checkbox") el.checked = !!v; else el.value = v ?? "";
+  }
+  document.getElementById("devList").textContent = "";
+  document.getElementById("probeResult").className = "probe hidden";
+  syncFormVisibility(); schedulePreview(0);
+  editing = true; document.getElementById("editor").classList.add("show");
+  if (!ENCODERS) loadEncoders().then(()=>syncFormVisibility()); else labelEncoders();
+  document.getElementById("screenPrev").style.display = "none"; document.getElementById("screenPrevMsg").textContent = "";
+  if (s.source_type === "desktop") loadMonitors().then(previewScreen);
+  f.name.focus();
+}
+
+function fillEngines(selected){
+  const f = document.getElementById("edForm"), sel = f.engine;
+  const opts = f.role.value === "watch" ? [["vlc","VLC"],["ffplay","FFplay (comes with FFmpeg)"]] : [["ffmpeg","FFmpeg (recommended)"],["vlc","VLC"]];
+  sel.innerHTML = opts.map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
+  sel.value = opts.some(o=>o[0]===selected) ? selected : opts[0][0];
+}
+
+document.addEventListener("change", e=>{
+  if (e.target && e.target.name === "source_type" && e.target.value === "desktop"){
+    const f = document.getElementById("edForm");
+    if (!/^(desktop|screen:\d+|title=.*)$/.test(f.source.value.trim())) f.source.value = "desktop";
+    loadMonitors().then(previewScreen);
+  }
+});
+document.addEventListener("input", e=>{
+  if (e.target && e.target.name === "source" && document.getElementById("edForm").source_type.value === "desktop"){
+    clearTimeout(_prevTimer); _prevTimer = setTimeout(previewScreen, 900);
+  }
+});
+function syncFormVisibility(){
+  const f = document.getElementById("edForm");
+  const role = f.role.value;
+  const wantEngines = role === "watch" ? ["vlc","ffplay"] : ["ffmpeg","vlc"];
+  if (!wantEngines.includes(f.engine.value) || f.engine.options[0].value !== wantEngines[0]) fillEngines(f.engine.value);
+  const send = role === "send", st = f.source_type.value, engine = f.engine.value;
+  const raw = ["desktop","dshow","test"].includes(st);
+  document.querySelectorAll(".send-only").forEach(e=>e.classList.toggle("hidden", !send));
+  document.querySelectorAll(".watch-only").forEach(e=>e.classList.toggle("hidden", send));
+  document.querySelectorAll(".file-only").forEach(e=>e.classList.toggle("hidden", st!=="file"));
+  const pat = f.test_pattern.value, isTest = st === "test";
+  document.querySelectorAll(".file-browse").forEach(e=>e.classList.toggle("hidden", st!=="file"));
+  document.querySelectorAll(".test-only").forEach(e=>e.classList.toggle("hidden", !isTest));
+  document.querySelectorAll(".test-color-only").forEach(e=>e.classList.toggle("hidden", !(isTest && pat==="color")));
+  document.querySelectorAll(".test-media-only").forEach(e=>e.classList.toggle("hidden", !(isTest && ["image","video"].includes(pat))));
+  document.querySelectorAll(".test-tone-only").forEach(e=>e.classList.toggle("hidden", !(isTest && pat!=="video")));
+  // resolution preset follows the fields; 16 ch label depends on source
+  const pn = presetName({width:f.width.value, height:f.height.value, fps:f.fps.value});
+  document.getElementById("presetSel").value = pn || "custom";
+  const amode = f.audio_mode.value, ch = +f.audio_channels.value;
+  document.querySelectorAll(".aud-enc").forEach(e=>e.classList.toggle("hidden", amode!=="aac" || st==="desktop"));
+  document.getElementById("ch16opt").textContent = (isTest && pat!=="video") ? "16 ch (8 stereo tracks)" : "16 ch (keep all source tracks)";
+  const hints = [];
+  const enc = ENCODERS && ENCODERS[f.video_encoder.value];
+  if (enc && !enc.ok && engine==="ffmpeg" && !(f.video_mode.value==="copy" && !["desktop","dshow","test"].includes(st)))
+    hints.push("⚠ " + ENC_LABELS[f.video_encoder.value] + ": " + enc.reason);
+  if (+f.width.value >= 3840){
+    hints.push("4K: BrightSign XD-series players take 4K H.264 up to 30 fps. Encoding 4K live is heavy for a CPU – pick your graphics card under Encoder if you have one, and use wired gigabit.");
+    if (+f.fps.value > 30) hints.push("⚠ 4K above 30 fps is not supported in H.264 on BrightSign – set FPS to 30 or lower.");
+  }
+  if (amode==="aac" && ch>2 && isTest && pat!=="video") hints.push(`Each channel gets its own tone (ch1 300 Hz, ch2 400 Hz, … ch${ch} ${200+ch*100} Hz) so you can tell them apart on a meter.`);
+  if (amode==="aac" && ch===16) hints.push("16 ch is sent as 8 separate stereo tracks. Players that only use one track (most BrightSign presentations) will play track 1 (ch 1–2).");
+  if (amode==="aac" && (ch===6||ch===8)) hints.push("Surround needs a player/display chain set up for multichannel output; otherwise it is mixed down to stereo.");
+  if (amode==="aac" && engine==="vlc" && ch===16) hints.push("⚠ 16 ch needs FFmpeg – switch Program to FFmpeg.");
+  document.getElementById("encHint").textContent = hints.join("  ");
+  document.getElementById("mediaLabel").textContent = pat==="image" ? "Picture file" : "Video file";
+  f.test_media.placeholder = pat==="image" ? "C:\\Media\\slate.png" : "C:\\Media\\promo.mp4";
+  document.getElementById("mediaHint").textContent = pat==="image"
+    ? "PNG / JPG etc. Shown full-screen, fitted to the resolution below with black bars if the shape differs."
+    : "Plays on a loop with its own sound. Fitted to the resolution below.";
+  document.querySelectorAll(".dshow-only").forEach(e=>e.classList.toggle("hidden", st!=="dshow"));
+  document.querySelectorAll(".desktop-only").forEach(e=>e.classList.toggle("hidden", st!=="desktop"));
+  document.querySelectorAll(".ffmpeg-only").forEach(e=>e.classList.toggle("hidden", engine!=="ffmpeg"));
+  document.querySelectorAll(".enc-only").forEach(e=>e.classList.toggle("hidden", f.video_mode.value==="copy" && !raw));
+  f.video_mode.disabled = raw; if (raw) f.video_mode.value = "h264";
+  const info = SRC_INFO[st];
+  document.querySelector(".src-input").classList.toggle("hidden", st==="test");
+  if (st === "desktop"){
+    if (!document.getElementById("screenSel").options.length) fillScreens();
+    syncScreenInputs();
+  }
+  document.getElementById("srcLabel").textContent = info.label;
+  f.source.placeholder = info.ph;
+  document.getElementById("srcHint").textContent = info.hint;
+  document.getElementById("destLegend").textContent = send ? "UDP destination (where the stream goes)" : "UDP stream to watch";
+  const ip = f.dest_ip.value.trim();
+  document.getElementById("destHint").innerHTML = send
+    ? (isMulticast(ip) ? `Multicast – every BrightSign set to <code class="mono">udp://${esc(ip)}:${esc(f.dest_port.value)}</code> will play it, and you can preview it here in VLC.`
+                       : `Unicast – sent only to the device at ${esc(ip)||"this IP"}. On that BrightSign use <code class="mono">udp://0.0.0.0:${esc(f.dest_port.value)}</code>.`)
+    : (isMulticast(ip) ? `Joins multicast group ${esc(ip)}:${esc(f.dest_port.value)} on the adapter below. FFmpeg receives it and hands it to the player, so the live status shows on the card.`
+                       : `Listens for unicast UDP sent to this PC on port ${esc(f.dest_port.value)} (the IP is ignored).`);
+}
+
+function formData(){
+  const f = document.getElementById("edForm"), o = {};
+  for (const el of f.elements){
+    if (!el.name) continue;
+    o[el.name] = el.type === "checkbox" ? el.checked : el.value;
+  }
+  return o;
+}
+
+function schedulePreview(delay=250){
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(async ()=>{
+    const r = await fetch("/api/command",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(formData())}).then(r=>r.json());
+    const box = document.getElementById("cmdPreview");
+    box.textContent = r.ok ? r.command : "⚠ " + r.error;
+    box.classList.toggle("bad", !r.ok);
+  }, delay);
+}
+
+const PRESETS = {
+  "480p":   {width:854,  height:480,  fps:30, video_bitrate:2500},
+  "720p":   {width:1280, height:720,  fps:30, video_bitrate:5000},
+  "1080p30":{width:1920, height:1080, fps:30, video_bitrate:8000},
+  "1080p60":{width:1920, height:1080, fps:60, video_bitrate:12000},
+  "4k30":   {width:3840, height:2160, fps:30, video_bitrate:25000},
+};
+const presetName = s => Object.keys(PRESETS).find(k => { const p = PRESETS[k];
+  return +s.width===p.width && +s.height===p.height && +s.fps===p.fps; }) || "";
+function applyPreset(name){
+  const p = PRESETS[name]; if (!p) return;
+  const f = document.getElementById("edForm");
+  for (const [k,v] of Object.entries(p)) f.elements[k].value = v;
+  f.gop.value = p.fps * 2;                      // keyframe every 2 seconds
+  syncFormVisibility(); schedulePreview(0);
+}
+
+async function saveStream(){
+  const d = formData();
+  if (!d.name.trim()) return toast("Give the portal a name.", "bad");
+  d.restart_if_running = document.getElementById("restartIfRunning").checked;
+  const j = await api("/api/streams", d);
+  if (j.ok){ closeModal("editor"); toast(j.restarted ? "Saved and restarted ✨" : "Portal saved ✨", "ok"); refresh(); }
+}
+
+function copyCmd(){ copyText(document.getElementById("cmdPreview").textContent); }
+function copyText(t){ navigator.clipboard?.writeText(t).then(()=>toast("Copied","ok"), ()=>toast("Copy failed","bad")); }
+
+async function loadDevices(){
+  const box = document.getElementById("devList");
+  box.textContent = "Searching…";
+  const d = await api("/api/devices");
+  if (d.note){ box.textContent = d.note; return; }
+  const f = document.getElementById("edForm");
+  const pick = (kind, name) => {
+    let cur = f.source.value, v = (cur.match(/video=([^:]+)/)||[])[1], a = (cur.match(/audio=(.+)/)||[])[1];
+    if (kind==="video") v = name; else a = name;
+    f.source.value = [v && "video="+v, a && "audio="+a].filter(Boolean).join(":");
+    schedulePreview(0);
+  };
+  box.innerHTML = "";
+  [["video",d.video],["audio",d.audio]].forEach(([k,list])=>{
+    const row = document.createElement("div"); row.style.margin="6px 0";
+    row.innerHTML = `<b style="color:var(--text)">${k}:</b> ` + (list.length?"":"none found");
+    list.forEach(n=>{ const b=document.createElement("button"); b.type="button"; b.className="small"; b.style.margin="2px"; b.textContent=n; b.onclick=()=>pick(k,n); row.appendChild(b); });
+    box.appendChild(row);
+  });
+}
+
+/* ---------- settings ---------- */
+function openSettings(){
+  const s = STATE.settings;
+  setFfmpeg.value = s.ffmpeg_path||""; setVlc.value = s.vlc_path||""; setDelay.value = s.restart_delay||3;
+  setAdapterValue(setAdapter, s.default_adapter);
+  setNotify.checked = s.tray_notifications !== false;
+  const w = STATE.web || {};
+  setPort.value = w.port || 8080; setAccess.value = w.access || "local"; setName.value = w.name || "";
+  setPw.value = ""; setPwClear.checked = false;
+  document.getElementById("pwClearRow").classList.toggle("hidden", !w.password_set);
+  syncWebHint();
+  document.getElementById("settings").classList.add("show");
+  fetch("/api/firewall").then(r=>r.json()).then(j=>{
+    document.getElementById("fwCmds").textContent = j.commands.length ? j.commands.join("\n") : "Set the FFmpeg / VLC paths first.";
+  });
+}
+async function detectTools(){
+  const d = await api("/api/detect");
+  if (d.ffmpeg_path) setFfmpeg.value = d.ffmpeg_path;
+  if (d.vlc_path) setVlc.value = d.vlc_path;
+  toast(`FFmpeg: ${d.ffmpeg_path||"not found"}\nVLC: ${d.vlc_path||"not found"}`);
+}
+function syncWebHint(){
+  const w = STATE.web || {}, net = setAccess.value === "network", port = +setPort.value || 8080;
+  const name = setName.value.trim(), nameOk = name && name.toLowerCase() === (w.name||"").toLowerCase() && w.name_works;
+  const here = name ? `http://${name}:${port}` : `http://localhost:${port}`;
+  const remote = name ? [`http://${name}:${port} (Windows PCs)`, `http://${name}.local:${port} (phones, Macs)`] : [];
+  let t = `This PC: ${here}` + (name && !nameOk ? " (after allowing it once – see below)" : "") + ".  ";
+  t += net
+    ? `Other devices: ${remote.concat((w.urls||[]).filter(u=>/\d+\.\d+\.\d+\.\d+/.test(u)).map(u=>u.replace(/:\d+$/,":"+port))).join("  or  ")}. `
+      + (w.password_set ? "They will be asked for the password. " : "⚠ No password set – anyone on the network could control the streams. ")
+      + "Windows may ask to allow Python through the firewall – click Allow (Private networks)."
+    : `Only this PC can open it. `;
+  t += "  This PC never needs the password.  Changing the port moves the page – it reopens at the new address, streams keep running.";
+  if (w.error) t = "⚠ " + w.error + "  " + t;
+  document.getElementById("webHint").textContent = t;
+  document.getElementById("fixPort").textContent = port;
+  document.getElementById("nameFixRow").classList.toggle("hidden", !(name && name.toLowerCase()===(w.name||"").toLowerCase() && !w.name_works && STATE.platform==="windows"));
+}
+async function fixName(){
+  const j = await api("/api/web-name-fix", {});
+  if (j.ok) setTimeout(async ()=>{ await refresh(); syncWebHint(); }, 6000);
+}
+async function saveWeb(){
+  const w = STATE.web || {};
+  const body = {port:+setPort.value, access:setAccess.value, name:setName.value.trim()};
+  if (setPwClear.checked) body.password = "";
+  else if (setPw.value) body.password = setPw.value;
+  const changed = body.port !== w.port || body.access !== w.access || body.name !== (w.name||"") || "password" in body;
+  if (!changed) return true;
+  const j = await api("/api/web-settings", body);
+  if (!j.ok) return false;
+  if (j.moved){
+    const local = ["localhost","127.0.0.1","::1","[::1]"].includes(location.hostname)
+                  || location.hostname.toLowerCase() === (w.name||"").toLowerCase();
+    const host = local ? (j.name_works ? j.name : "localhost") : location.hostname;
+    const next = `${location.protocol}//${host}:${j.port}/`;
+    document.body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:14px;text-align:center">
+      <div class="portal"></div><h1>Moving to ${esc(next)} …</h1>
+      <p style="color:var(--muted)">Your streams keep running. If this page doesn't reload by itself, open <a style="color:#a5f3fc" href="${esc(next)}">${esc(next)}</a></p></div>`;
+    STOPPED = true;
+    setTimeout(()=>location.href = next, 1500);
+    return false;
+  }
+  return true;
+}
+async function saveSettings(){
+  const j = await api("/api/settings", {ffmpeg_path:setFfmpeg.value.trim().replace(/^"|"$/g,""), vlc_path:setVlc.value.trim().replace(/^"|"$/g,""), restart_delay:+setDelay.value||3, default_adapter:setAdapter.value, tray_notifications:setNotify.checked});
+  if (j.ok && await saveWeb()){ closeModal("settings"); toast("Settings saved","ok"); refresh(); }
+}
+
+/* ---------- log ---------- */
+async function showLog(id){
+  logId = id;
+  const s = STATE.streams.find(x=>x.id===id);
+  document.getElementById("logTitle").textContent = "Log – " + s.name;
+  document.getElementById("logModal").classList.add("show");
+  await pollLog(true);
+  clearInterval(logTimer); logTimer = setInterval(pollLog, 1500);
+}
+async function pollLog(first){
+  if (!logId) return;
+  const box = document.getElementById("logBox");
+  const atBottom = first || box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
+  const j = await fetch(`/api/streams/${logId}/log`).then(r=>r.json());
+  box.textContent = j.lines.join("\n") || "(nothing yet – start the portal)";
+  if (atBottom) box.scrollTop = box.scrollHeight;
+}
+function closeLog(){ clearInterval(logTimer); logId = null; closeModal("logModal"); }
+
+async function shutdown(){
+  if (!confirm("Shut down the Magical Portal System?\n\nAll portals will stop. Start it again with the launcher.")) return;
+  await fetch("/api/shutdown",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+  STOPPED = true;
+  document.body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:14px;text-align:center">
+    <div class="portal" style="animation:none;opacity:.5"></div><h1>Magical Portal System is shut down</h1>
+    <p style="color:var(--muted)">All streams were stopped. Double-click the launcher to start it again, then reload this page.</p></div>`;
+}
+function openHelp(){ document.getElementById("help").classList.add("show"); }
+function closeModal(id){ document.getElementById(id).classList.remove("show"); if (id==="editor") editing=false; }
+document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ ["editor","settings","help"].forEach(closeModal); closeLog(); }});
+
+loadAdapters().then(refresh); loadMonitors();
+setInterval(()=>{ if (!document.hidden) refresh(); }, 2000);
+</script>
+</body>
+</html>
