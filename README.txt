@@ -1,5 +1,9 @@
-MAGICAL PORTAL SYSTEM v1.7.2  -  UDP stream control for BrightSign (Windows 10/11)
-==================================================================================
+PORTAL SYSTEM v1.8.3  by Portal System  (Windows 10/11)
+=======================================================
+  Magical Portal System  - UDP stream control for BrightSign
+  NetworkPocketknife     - UDP / TCP / Serial / SSH / REST API tools
+                           (with Crestron VC-4 and DM NVX commands)
+  Both live in ONE window with two top tabs:  [Magical Portal]  [NetworkPocketknife]
 
 INSTALL / UPDATE
   1. Right-click the zip  >  Extract All.
@@ -10,7 +14,9 @@ INSTALL / UPDATE
        - let you choose the install folder (default C:\MagicalPortal)
        - check for Python / FFmpeg / VLC, offer to install missing ones,
          and let you choose where Python is installed
-       - create "Magical Portal System" shortcuts (Desktop + Start menu)
+       - set up NetworkPocketknife (downloads about 300 MB of components the first time,
+         needs internet; if that fails, Magical Portal still works in your browser)
+       - create a "Portal System" shortcut (Desktop + Start menu)
        - set up the address http://PortalSystem:8080 on this PC and the
          Windows Firewall rules (together, one admin prompt)
        - optionally start it at logon
@@ -18,9 +24,16 @@ INSTALL / UPDATE
   To update later: extract the new zip and run Install.bat again.
 
 USE IT
-  Start : "Magical Portal System" icon on the Desktop / Start menu (no black window).
+  Start : "Portal System" icon on the Desktop / Start menu. It opens the window and
+          starts the portal server if it isn't running.
+  Window: top tab "Magical Portal"     = the control page below, built in
+          top tab "NetworkPocketknife" = UDP, TCP Client, TCP Server, Serial, SSH, REST API
+          Ctrl+1 / Ctrl+2 switch between them. File > New NetworkPocketknife tab adds more.
+          The bar above the control page shows how many portals run, and has
+          Shut down / Reload / Open in browser.
+  Closing the window does NOT stop your portals - they keep running in the background.
   Tray  : while running, a portal icon sits in the hidden icons (^) next to the clock.
-            left-click  = open the control page
+            left-click  = open the Portal System window
             right-click = Start all / Stop all / Shut down
             hover       = how many portals are running
           It pops up a Windows notification if a portal loses its signal or stops.
@@ -91,6 +104,33 @@ TROUBLESHOOTING (in the install folder)
   Start Magical Portal System.bat   runs it WITH a console window to see messages.
   logs\server.log                   messages when started from the icon.
 
+NETWORKPOCKETKNIFE (second top tab)
+  UDP         listen port + remote IP/port, optional different send-from port, broadcast
+  TCP Client  connect to host:port            TCP Server  listen, see clients, send to all/selected
+  Serial      COM port, baud, parity, flow control, DTR/RTS
+  SSH         PuTTY-style terminal, saved sessions, key files
+  REST API    profiles: Generic, Crestron VC-4 (token from VC-4 Settings > Tokens),
+              Crestron DM NVX (web-page user/password, login handled automatically)
+  YOUR OWN DEVICES: "Profile" button > New profile... (name, http/https, port, base path,
+              login type). Then "New command..." under the command list, or build a request,
+              test it and use "Save as command...". Right-click a command to edit, duplicate,
+              rename, move or delete it. Duplicate profile... makes an editable copy of a
+              built-in one (e.g. your own NVX profile). Commands of your own profiles are saved
+              in the profile file; extra commands for the built-in profiles are marked with a star.
+  REST extras: "Import..." / "Export..." (next to the
+              profile) move your setup between PCs or share it:
+                Portal System file  device IPs + logins, your star commands, your profiles and
+                                    full copies of the built-in profiles (tick box, on by default;
+                                    passwords/tokens only if you tick that box)
+                Profile > Export this profile...  any one profile (built-in too) as one file
+                Importing a built-in profile the other PC already has (same commands) is skipped;
+                a changed version can be kept as a separate "(imported)" profile.
+                Postman collection  the current profile's commands, for Postman / Insomnia;
+                                    Postman collections from others import as a new profile
+  Send rows: text with escapes (\r \n <0D><0A>) or HEX; repeat timer; ASCII/HEX log.
+  Press F1 in the window for details. Windows Firewall may ask to allow Python the first
+  time you start a UDP listener or TCP server there - click Allow.
+
 UNINSTALL
-  Settings > Apps > Installed apps > Magical Portal System > Uninstall
+  Settings > Apps > Installed apps > Portal System (Magical Portal + NetworkPocketknife) > Uninstall
   or Uninstall.bat in the install folder.

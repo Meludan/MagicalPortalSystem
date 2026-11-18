@@ -28,7 +28,7 @@ from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
-__version__ = "1.7.2"
+__version__ = "1.8.3"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WEB_DIR = os.path.join(BASE_DIR, "web")
@@ -1826,6 +1826,29 @@ class Handler(BaseHTTPRequestHandler):
 # Main
 # --------------------------------------------------------------------------- #
 
+def gui_command():
+    """The Portal System window (NetworkPocketknife with the embedded control page), if installed."""
+    gui = os.path.join(BASE_DIR, "pocketknife", "networkpocketknife.py")
+    pyw = os.path.join(BASE_DIR, "pocketknife", ".venv", "Scripts", "pythonw.exe")
+    if IS_WINDOWS and os.path.isfile(gui) and os.path.isfile(pyw):
+        return [pyw, gui, "--portal"]
+    return None
+
+
+def open_ui(url=None):
+    """Open the Portal System window if it is installed, otherwise the control page in the browser."""
+    cmd = gui_command()
+    if cmd:
+        try:
+            subprocess.Popen(cmd, cwd=os.path.dirname(cmd[1]), close_fds=True,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return
+        except OSError as e:
+            print(f"[ui] could not open the Portal System window: {e}")
+    import webbrowser
+    webbrowser.open(url or web_url())
+
+
 def main():
     # Started hidden (pythonw / desktop icon): there is no console, so write output to a log file
     if sys.stdout is None or sys.stderr is None or "--hidden" in sys.argv:
@@ -1842,7 +1865,6 @@ def main():
 
     import atexit
     import signal as _signal
-    import webbrowser
     atexit.register(stop_all)
 
     def _bye(*_):
@@ -1866,7 +1888,7 @@ def main():
         url = web_url(host, port)
         print(f"Port {port} is busy - Magical Portal System is probably already running. Opening {url}")
         if not args.no_browser:
-            webbrowser.open(url)
+            open_ui(url)
         return
     WEB.update(httpd=httpd, host=host, port=port)
     update_responder()
@@ -1889,7 +1911,7 @@ def main():
     print("   Stop it with the Shut down button in the page, or Ctrl+C here.")
     print("=" * 60)
     if not args.no_browser:
-        threading.Timer(1.0, lambda: webbrowser.open(web_url())).start()
+        threading.Timer(1.0, open_ui).start()
 
     def _quit():
         stop_all()
@@ -1902,7 +1924,7 @@ def main():
             import tray as tray_mod
             tray = tray_mod.TrayIcon(
                 icon_path=os.path.join(WEB_DIR, "portal.ico"),
-                on_open=lambda: webbrowser.open(web_url()),   # always the current address
+                on_open=open_ui,          # Portal System window, or the page at its current address
                 on_start_all=start_all_senders,
                 on_stop_all=stop_all,
                 on_quit=_quit,

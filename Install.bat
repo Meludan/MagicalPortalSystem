@@ -1,5 +1,5 @@
 @echo off
-title Magical Portal System - Setup
+title Portal System - Setup
 cd /d "%~dp0"
 if not exist "%~dp0app\server.py" (
     echo.

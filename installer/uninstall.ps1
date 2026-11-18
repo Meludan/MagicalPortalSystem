@@ -1,4 +1,4 @@
-# Magical Portal System - Uninstall
+# Portal System (Magical Portal System + NetworkPocketknife) - Uninstall
 # Started from Uninstall.bat in the install folder, or Settings > Apps > Installed apps.
 
 $dest = $PSScriptRoot
@@ -19,9 +19,9 @@ function Ask($question, $default = 'Y') {
 }
 
 Write-Host ''
-Write-Host "  Magical Portal System - Uninstall  ($dest)" -ForegroundColor Magenta
+Write-Host "  Portal System - Uninstall  ($dest)" -ForegroundColor Magenta
 Write-Host ''
-if (-not (Ask 'Remove Magical Portal System from this PC?' 'N')) { Read-Host '  Cancelled. Press Enter to close'; return }
+if (-not (Ask 'Remove Portal System (Magical Portal System + NetworkPocketknife) from this PC?' 'N')) { Read-Host '  Cancelled. Press Enter to close'; return }
 
 # stop it if running
 try {
@@ -29,11 +29,18 @@ try {
         -Body '{}' -ContentType 'application/json' -TimeoutSec 3 | Out-Null
     Start-Sleep -Seconds 3
 } catch { }
+# close the Portal System window too
+Get-CimInstance Win32_Process -Filter "Name='pythonw.exe' OR Name='python.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match 'networkpocketknife\.py' } |
+    ForEach-Object { Invoke-CimMethod -InputObject $_ -MethodName Terminate -ErrorAction SilentlyContinue | Out-Null }
+Start-Sleep -Seconds 1
 
 # shortcuts
 foreach ($f in @('Desktop', 'Programs', 'Startup')) {
-    $lnk = Join-Path ([Environment]::GetFolderPath($f)) 'Magical Portal System.lnk'
-    if (Test-Path -LiteralPath $lnk) { Remove-Item -LiteralPath $lnk -Force }
+    foreach ($n in @('Magical Portal System.lnk', 'Portal System.lnk')) {
+        $lnk = Join-Path ([Environment]::GetFolderPath($f)) $n
+        if (Test-Path -LiteralPath $lnk) { Remove-Item -LiteralPath $lnk -Force }
+    }
 }
 Write-Host '  Shortcuts removed.' -ForegroundColor Green
 
@@ -57,6 +64,13 @@ if (Ask 'Remove the firewall rules and the PortalSystem address too? (one admin 
     Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
 }
 
+# NetworkPocketknife's own settings (send rows, saved SSH sessions, REST devices)
+if (Ask 'Also delete the NetworkPocketknife settings and saved sessions?' 'N') {
+    Remove-Item -Path 'HKCU:\Software\Portal System' -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $env:APPDATA 'Portal System') -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host '  NetworkPocketknife settings removed.' -ForegroundColor Green
+}
+
 # keep a copy of the saved portals
 $cfg = Join-Path $dest 'streams.json'
 if ((Test-Path -LiteralPath $cfg) -and (Ask 'Keep a backup of your saved portals on the Desktop?')) {
@@ -65,7 +79,7 @@ if ((Test-Path -LiteralPath $cfg) -and (Ask 'Keep a backup of your saved portals
 }
 
 Write-Host ''
-Write-Host '  Magical Portal System has been removed. (Python, FFmpeg and VLC were left installed.)' -ForegroundColor Green
+Write-Host '  Portal System has been removed. (Python, FFmpeg and VLC were left installed.)' -ForegroundColor Green
 Read-Host '  Press Enter to finish'
 # delete the folder a moment after this window closes
 Start-Process cmd.exe -ArgumentList "/c timeout /t 2 /nobreak >nul & rmdir /s /q `"$dest`"" -WindowStyle Hidden

@@ -1,8 +1,8 @@
-# Magical Portal System - Setup
+# Portal System (Magical Portal System + NetworkPocketknife) - Setup
 # Run through Install.bat (double-click). Run it again any time to update.
 
 $ErrorActionPreference = 'Stop'
-try { $Host.UI.RawUI.WindowTitle = 'Magical Portal System - Setup' } catch {}
+try { $Host.UI.RawUI.WindowTitle = 'Portal System - Setup' } catch {}
 
 $pkg        = Split-Path -Parent $PSScriptRoot      # folder that holds Install.bat
 $app        = Join-Path $pkg 'app'
@@ -45,12 +45,19 @@ function Get-WebName($dir) {
     return 'PortalSystem'
 }
 function Exit-Setup($code = 0) { Write-Host ''; exit $code }
+function Stop-PortalWindow {
+    # close the Portal System window (NetworkPocketknife) so its files can be updated
+    Get-CimInstance Win32_Process -Filter "Name='pythonw.exe' OR Name='python.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match 'networkpocketknife\.py' } |
+        ForEach-Object { Invoke-CimMethod -InputObject $_ -MethodName Terminate -ErrorAction SilentlyContinue | Out-Null }
+}
 
 $newVersion = Get-AppVersion (Join-Path $app 'server.py')
 
 Write-Host ''
 Write-Host '  ==============================================' -ForegroundColor Magenta
-Write-Host "     Magical Portal System  v$newVersion  -  Setup" -ForegroundColor Magenta
+Write-Host "     Portal System  v$newVersion  -  Setup" -ForegroundColor Magenta
+Write-Host '     Magical Portal System + NetworkPocketknife' -ForegroundColor Magenta
 Write-Host '  ==============================================' -ForegroundColor Magenta
 
 # ------------------------------------------------------------------ 1. unblock
@@ -84,7 +91,7 @@ if ($installedDir) {
 } else {
     Say '    Not installed yet - fresh install.'
     while ($true) {
-        $dest = AskPath 'Where should Magical Portal System be installed?' $defaultDir
+        $dest = AskPath 'Where should Portal System be installed?' $defaultDir
         if ($dest -match '^[A-Za-z]:\\Program Files') {
             Say '    Please choose a folder outside "Program Files" - the app saves its settings next to itself.' Yellow
             continue
@@ -101,11 +108,12 @@ try {
     Step 'Stopped the copy that was running (start it again at the end)'
     Start-Sleep -Seconds 3
 } catch { }
+Stop-PortalWindow
 
 # ------------------------------------------------------------------ 4. copy files
 Step "Copying v$newVersion to $dest"
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
-robocopy $app $dest /E /NFL /NDL /NJH /NJS /NP /XF streams.json /XD logs __pycache__ | Out-Null
+robocopy $app $dest /E /NFL /NDL /NJH /NJS /NP /XF streams.json /XD logs __pycache__ .venv | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "Copying files failed (robocopy code $LASTEXITCODE)." }
 Copy-Item -LiteralPath (Join-Path $pkg 'README.txt') -Destination $dest -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uninstall.ps1') -Destination $dest -Force
@@ -246,6 +254,48 @@ if (-not $vlc -and (Ask 'VLC is not installed. Install it now? (optional - FFpla
 }
 if ($vlc) { Say "    VLC    : $vlc" Green } else { Say '    VLC    : not found (optional)' Yellow }
 
+# NetworkPocketknife (the Portal System window): its own Python environment in pocketknife\.venv
+$pk      = Join-Path $dest 'pocketknife'
+$venvPy  = Join-Path $pk '.venv\Scripts\python.exe'
+$venvPyw = Join-Path $pk '.venv\Scripts\pythonw.exe'
+$guiOK   = $false
+function Test-GuiParts {
+    if (-not (Test-Path -LiteralPath $venvPy)) { return $false }
+    $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try {
+        & $venvPy -c "import PySide6.QtWebEngineWidgets, serial, paramiko, pyte, requests" 2>$null | Out-Null
+        return ($LASTEXITCODE -eq 0)
+    } catch { return $false } finally { $ErrorActionPreference = $old }
+}
+if ($pyw) {
+    Step 'Setting up NetworkPocketknife (the Portal System window)'
+    $basePy = Join-Path (Split-Path $pyw) 'python.exe'
+    $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try {
+        if (Test-GuiParts) {
+            Say '    Already set up.' Green
+            $guiOK = $true
+        } else {
+            if (-not (Test-Path -LiteralPath $venvPy)) {
+                Say '    Creating its private Python environment...'
+                & $basePy -m venv (Join-Path $pk '.venv')
+            }
+            if (Test-Path -LiteralPath $venvPy) {
+                Say '    Downloading its components (Qt, pyserial, paramiko, pyte, requests).' Yellow
+                Say '    About 300 MB - this can take a few minutes on the first install...' Yellow
+                & $venvPy -m pip install --disable-pip-version-check --upgrade pip 2>&1 | Out-Null
+                & $venvPy -m pip install --disable-pip-version-check -r (Join-Path $pk 'requirements.txt')
+                $guiOK = Test-GuiParts
+            }
+            if ($guiOK) { Say '    NetworkPocketknife is ready.' Green }
+            else {
+                Say '    NetworkPocketknife could not be set up (no internet, or this Python version is too new for Qt).' Yellow
+                Say '    Magical Portal System still works - it opens in your browser. Run Setup again later to retry.' Yellow
+            }
+        }
+    } finally { $ErrorActionPreference = $old }
+}
+
 # save tool paths for the app (first install only - keeps your Settings on update)
 $cfg = Join-Path $dest 'streams.json'
 if (-not (Test-Path -LiteralPath $cfg)) {
@@ -259,22 +309,34 @@ $startupLnk = Join-Path ([Environment]::GetFolderPath('Startup')) 'Magical Porta
 if ($pyw) {
     Step 'Creating shortcuts'
     $ws = New-Object -ComObject WScript.Shell
-    function New-PortalShortcut($path) {
+    function New-Shortcut($path, $target, $arguments, $workdir, $description) {
         $s = $ws.CreateShortcut($path)
-        $s.TargetPath = $pyw
-        $s.Arguments = "`"$dest\server.py`" --hidden"
-        $s.WorkingDirectory = $dest
+        $s.TargetPath = $target
+        $s.Arguments = $arguments
+        $s.WorkingDirectory = $workdir
         $s.IconLocation = "$dest\web\portal.ico,0"
-        $s.Description = "Magical Portal System v$newVersion"
+        $s.Description = $description
         $s.Save()
     }
-    New-PortalShortcut (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Magical Portal System.lnk')
-    New-PortalShortcut (Join-Path ([Environment]::GetFolderPath('Programs')) 'Magical Portal System.lnk')
-    Say '    Desktop + Start menu shortcuts ready.' Green
+    $places = @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))
+    foreach ($dir in $places) {
+        if ($guiOK) {
+            # one icon opens the Portal System window (it starts the portal server too)
+            New-Shortcut (Join-Path $dir 'Portal System.lnk') $venvPyw "`"$pk\networkpocketknife.py`" --portal" $pk `
+                "Portal System v$newVersion - Magical Portal System + NetworkPocketknife"
+            $oldLnk = Join-Path $dir 'Magical Portal System.lnk'
+            if (Test-Path -LiteralPath $oldLnk) { Remove-Item -LiteralPath $oldLnk -Force }
+        } else {
+            New-Shortcut (Join-Path $dir 'Magical Portal System.lnk') $pyw "`"$dest\server.py`" --hidden" $dest `
+                "Magical Portal System v$newVersion"
+        }
+    }
+    Say "    Desktop + Start menu shortcut ready: $(if ($guiOK) { 'Portal System' } else { 'Magical Portal System' })" Green
     $hadStartup = Test-Path -LiteralPath $startupLnk
-    if (Ask 'Start Magical Portal System automatically when this user logs in?' $(if ($installedDir -and -not $hadStartup) { 'N' } else { 'Y' })) {
-        New-PortalShortcut $startupLnk
-        Say '    Will start at logon.' Green
+    if (Ask 'Start the portal server (tray icon) automatically when this user logs in?' $(if ($installedDir -and -not $hadStartup) { 'N' } else { 'Y' })) {
+        # at logon: portals start quietly in the tray; click the tray icon to open the window
+        New-Shortcut $startupLnk $pyw "`"$dest\server.py`" --hidden --no-browser" $dest "Magical Portal System v$newVersion (background)"
+        Say '    Will start at logon (tray icon).' Green
     } elseif ($hadStartup) {
         Remove-Item -LiteralPath $startupLnk -Force
     }
@@ -285,11 +347,12 @@ $sizeKB = [int]((Get-ChildItem -LiteralPath $dest -Recurse -File | Measure-Objec
 New-Item -Path $regApp -Force | Out-Null
 Set-ItemProperty -Path $regApp -Name InstallDir -Value $dest
 Set-ItemProperty -Path $regApp -Name Version -Value $newVersion
+if ($pyw) { Set-ItemProperty -Path $regApp -Name Pythonw -Value $pyw }
 New-Item -Path $regUninst -Force | Out-Null
 $props = @{
-    DisplayName     = 'Magical Portal System'
+    DisplayName     = 'Portal System (Magical Portal + NetworkPocketknife)'
     DisplayVersion  = $newVersion
-    Publisher       = 'Magical Portal System'
+    Publisher       = 'Portal System'
     DisplayIcon     = "$dest\web\portal.ico"
     InstallLocation = $dest
     UninstallString = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$dest\uninstall.ps1`""
@@ -359,14 +422,17 @@ if ($doName -or $doFw) {
 # ------------------------------------------------------------------ done
 Write-Host ''
 Write-Host '  ==============================================' -ForegroundColor Green
-Write-Host "     Magical Portal System v$newVersion is ready!" -ForegroundColor Green
+Write-Host "     Portal System v$newVersion is ready!" -ForegroundColor Green
 Write-Host '  ==============================================' -ForegroundColor Green
 Say "    Installed in : $dest"
-Say '    Start it     : "Magical Portal System" icon on the Desktop / Start menu'
+if ($guiOK) { Say '    Start it     : "Portal System" icon on the Desktop / Start menu' }
+else         { Say '    Start it     : "Magical Portal System" icon on the Desktop / Start menu' }
+if ($guiOK) { Say '    Window       : top tabs "Magical Portal" (control page) and "NetworkPocketknife" (tools)' }
 Say "    Control page : http://$(Get-WebName $dest):$(Get-WebPort $dest)  (name and port: Settings > Web page)"
 Say '    While running: portal icon in the hidden icons (^) next to the clock'
 Say '    Stop it      : right-click that icon > Shut down  (or the button in the page)'
 Say '    Remove it    : Settings > Apps > Installed apps, or Uninstall.bat in the install folder'
-if ($pyw -and (Ask 'Start Magical Portal System now?')) {
-    Start-Process -FilePath $pyw -ArgumentList "`"$dest\server.py`" --hidden" -WorkingDirectory $dest
+if ($pyw -and (Ask 'Start Portal System now?')) {
+    if ($guiOK) { Start-Process -FilePath $venvPyw -ArgumentList "`"$pk\networkpocketknife.py`" --portal" -WorkingDirectory $pk }
+    else        { Start-Process -FilePath $pyw -ArgumentList "`"$dest\server.py`" --hidden" -WorkingDirectory $dest }
 }

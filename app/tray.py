@@ -174,7 +174,7 @@ class TrayIcon:
 
     def _menu(self):
         menu = user32.CreatePopupMenu()
-        user32.AppendMenuW(menu, MF_STRING, ID_OPEN, "Open control page")
+        user32.AppendMenuW(menu, MF_STRING, ID_OPEN, "Open Portal System")
         user32.AppendMenuW(menu, MF_SEPARATOR, 0, None)
         user32.AppendMenuW(menu, MF_STRING, ID_START, "Start all senders")
         user32.AppendMenuW(menu, MF_STRING, ID_STOP, "Stop all portals")
